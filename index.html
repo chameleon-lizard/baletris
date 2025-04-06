@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Tetris Roguelite</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* --- Global Box Sizing --- */
+        *, *::before, *::after { box-sizing: border-box; }
+
+        /* Basic styling */
+        html, body { height: 100%; overflow: hidden; }
+        body {
+            font-family: 'Inter', sans-serif; display: flex; justify-content: center; align-items: center;
+            background-color: #1a1a2e; color: #e0e0e0; margin: 0; padding: 0;
+            flex-direction: column;
+        }
+        .game-area-wrapper {
+            display: flex; flex-direction: column; align-items: center; gap: 0.5rem;
+            width: 100%; max-width: 600px; padding: 0.5rem; flex-grow: 1;
+            justify-content: center;
+        }
+        /* Modifier and Timer Display Styling */
+        .status-display { display: flex; gap: 1rem; background-color: rgba(0, 0, 0, 0.3); padding: 0.25rem 0.75rem; border-radius: 0.375rem; margin-bottom: 0.5rem; min-height: 1.5rem; align-items: center; }
+        #temporary-modifier-display { font-size: 1rem; font-weight: 500; color: #facc15; }
+        #modifier-timer-display { font-size: 0.9rem; font-weight: 400; color: #9ca3af; }
+        .game-container {
+            display: flex; gap: 1rem; align-items: flex-start; padding: 0.5rem;
+            background-color: #162447; border-radius: 0.75rem; box-shadow: 0 10px 20px rgba(0, 0, 0, 0.4);
+            width: 100%; justify-content: space-around; flex-wrap: wrap;
+        }
+
+        #hold-item-container {
+          cursor: pointer;
+        }
+
+        /* --- Board Area Wrapper --- */
+        #board-area {
+             position: relative; /* Positioning context for overlay */
+             /* line-height: 0; */ /* Removed */
+             /* Width/height set by JS */
+             display: flex;
+             justify-content: center;
+             align-items: center;
+             flex-grow: 1;
+             min-width: 200px;
+             min-height: 400px;
+             overflow: hidden;
+        }
+        button {
+          touch-action: manipulation;
+          -webkit-touch-callout: none;
+          -webkit-user-select: none;
+          user-select: none;
+          -webkit-tap-highlight-color: transparent;
+        }
+
+
+        #game-board {
+            --board-border-width: 3px; border: var(--board-border-width) solid #4b5563; display: grid;
+            border-radius: 0.5rem; box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.5);
+            overflow: hidden; transition: background-color 0.5s ease;
+            /* Width/height now implicitly 100% of #board-area (minus borders) */
+            /* Grid templates set by JS */
+            background-color: #0f172a; /* Default color set here */
+            flex-shrink: 0;
+        }
+        /* Restricted Zone Overlay */
+        #restricted-zone-overlay {
+            position: absolute; top: 3px; left: 3px; width: calc(100% - 6px); height: 0; /* Set by JS */
+            background: repeating-linear-gradient( 45deg, rgb(95 95 0 / 41%), rgb(95 95 0 / 41%) 3px, rgba(0, 0, 0, 0.25) 3px, rgba(0, 0, 0, 0.25) 6px );
+            z-index: 100; pointer-events: none; transition: height 0.3s ease;
+        }
+        .cell { border: 1px solid #374151; border-radius: 0.125rem; position: relative; z-index: 1; }
+        /* Tetromino Colors */
+        .T { background-color: #a855f7; box-shadow: inset 0 0 5px rgba(255,255,255,0.3); } .O { background-color: #facc15; box-shadow: inset 0 0 5px rgba(255,255,255,0.3); } .L { background-color: #f97316; box-shadow: inset 0 0 5px rgba(255,255,255,0.3); } .J { background-color: #3b82f6; box-shadow: inset 0 0 5px rgba(255,255,255,0.3); } .I { background-color: #22d3ee; box-shadow: inset 0 0 5px rgba(255,255,255,0.3); } .S { background-color: #22c55e; box-shadow: inset 0 0 5px rgba(255,255,255,0.3); } .Z { background-color: #ef4444; box-shadow: inset 0 0 5px rgba(255,255,255,0.3); }
+        .ghost { background-color: rgba(255, 255, 255, 0.1); border: 1px dashed rgba(255, 255, 255, 0.3); } .garbage { background-color: #6b7280; box-shadow: inset 0 0 5px rgba(0,0,0,0.3); }
+        /* Info Panel Styling */
+        .info-panel { display: flex; flex-direction: column; gap: 0.5rem; min-width: 120px; height: 606px; padding: 0.5rem; background-color: #1e3a8a; border-radius: 0.5rem; }
+        .info-item { background-color: #172554; padding: 0.5rem; border-radius: 0.375rem; text-align: center; }
+        .info-label { font-size: 0.75rem; color: #9ca3af; margin-bottom: 0.1rem; display: block; }
+        .info-value { font-size: 1.1rem; font-weight: 600; color: #e5e7eb; }
+        /* Message Box Styling */
+        #message-box { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background-color: rgba(0, 0, 0, 0.8); color: white; padding: 2rem; border-radius: 0.75rem; text-align: center; z-index: 200; display: none; border: 2px solid #4b5563; }
+        #message-box button { margin-top: 1rem; padding: 0.5rem 1rem; background-color: #3b82f6; color: white; border: none; border-radius: 0.375rem; cursor: pointer; transition: background-color 0.2s; }
+        #message-box button:hover { background-color: #2563eb; }
+        /* Shop Modal Styling */
+        #shop-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.7); display: none; justify-content: center; align-items: center; z-index: 150; padding: 1rem; }
+        .shop-content { background-color: #162447; padding: 2rem; border-radius: 0.75rem; border: 2px solid #4b5563; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5); color: #e0e0e0; min-width: 300px; max-width: 500px; text-align: center; }
+        .shop-title { font-size: 1.5rem; font-weight: 600; margin-bottom: 1.5rem; color: #fff; }
+        .shop-items { display: flex; gap: 1.5rem; justify-content: center; margin-bottom: 1.5rem; flex-wrap: wrap; }
+        .shop-item-card { background-color: #1e3a8a; padding: 1rem; border-radius: 0.5rem; border: 1px solid #3b82f6; display: flex; flex-direction: column; align-items: center; gap: 0.5rem; min-width: 150px; flex-basis: 150px; position: relative; }
+        .shop-item-active { border-color: #ef4444; box-shadow: 0 0 10px rgba(239, 68, 68, 0.7); }
+        .shop-item-active-label { position: absolute; top: -10px; left: 50%; transform: translateX(-50%); background-color: #ef4444; color: white; font-size: 0.75rem; font-weight: bold; padding: 0.1rem 0.5rem; border-radius: 0.25rem; white-space: nowrap; }
+        .shop-item-name { font-weight: 600; font-size: 1.1rem; margin-top: 5px; }
+        .shop-item-desc { font-size: 0.875rem; color: #9ca3af; min-height: 3.5em; margin-bottom: 0.5rem; }
+        .shop-item-cost { font-weight: bold; color: #facc15; }
+        .shop-buy-button { padding: 0.5rem 1rem; background-color: #10b981; color: white; border: none; border-radius: 0.375rem; cursor: pointer; transition: background-color 0.2s; width: 100%; margin-top: auto; }
+        .shop-buy-button:hover:not(:disabled) { background-color: #059669; }
+        .shop-buy-button:disabled { background-color: #4b5563; cursor: not-allowed; opacity: 0.7; }
+        .shop-close-button { margin-top: 1rem; padding: 0.5rem 1rem; background-color: #ef4444; color: white; border: none; border-radius: 0.375rem; cursor: pointer; transition: background-color 0.2s; }
+        .shop-close-button:hover { background-color: #dc2626; }
+        /* Visual Effects */
+        @keyframes shake { 0%, 100% { transform: translateX(0); } 10%, 30%, 50%, 70%, 90% { transform: translateX(-3px); } 20%, 40%, 60%, 80% { transform: translateX(3px); } } .screen-shake { animation: shake 0.2s cubic-bezier(.36,.07,.19,.97) both; }
+        #game-board::after { content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-color: white; opacity: 0; pointer-events: none; z-index: 5; }
+        @keyframes flash-1 { 0% { opacity: 0; } 50% { opacity: 0.3; } 100% { opacity: 0; } } @keyframes flash-2 { 0% { opacity: 0; } 50% { opacity: 0.45; } 100% { opacity: 0; } } @keyframes flash-3 { 0% { opacity: 0; } 50% { opacity: 0.6; } 100% { opacity: 0; } } @keyframes flash-tetris { 0% { opacity: 0; background-color: #fff; } 25% { opacity: 0.8; background-color: #ff0; } 50% { opacity: 0.8; background-color: #0ff; } 75% { opacity: 0.8; background-color: #f0f; } 100% { opacity: 0; background-color: #fff; } }
+        .flash-1::after { animation: flash-1 0.15s ease-out; } .flash-2::after { animation: flash-2 0.2s ease-out; } .flash-3::after { animation: flash-3 0.25s ease-out; } .flash-tetris::after { animation: flash-tetris 0.4s ease-out; }
+
+        /* --- Mobile Controls Styling --- */
+        #controls-container { display: flex; justify-content: center; align-items: center; flex-wrap: wrap; gap: 0.5rem; padding: 0.75rem 0.5rem; width: 100%; max-width: 600px; background-color: none; border-top: 1px solid #374151; }
+        .control-button { background-color: #374151; color: #e5e7eb; border: 1px solid #4b5563; border-radius: 0.5rem; padding: 0.75rem; display: flex; justify-content: center; align-items: center; cursor: pointer; transition: background-color 0.15s ease; flex-grow: 1; min-width: 44px; min-height: 44px; }
+        .control-button:active { background-color: #4b5563; }
+        .control-button img { width: 24px; height: 24px; filter: invert(99%) sepia(1%) saturate(312%) hue-rotate(199deg) brightness(118%) contrast(89%); }
+
+    </style>
+</head>
+<body>
+    <div class="game-area-wrapper">
+        <div class="game-container" id="game-container">
+            <div style="width: 100%; display: flex; flex-direction: row; flex-wrap: nowrap; justify-content: space-around;">
+                <div class="status-display">
+                    <div id="temporary-modifier-display">Modifier: None</div>
+                    <div id="modifier-timer-display">(Next in: 15s)</div>
+                </div>
+            </div>
+            <div id="board-area" style="position: relative;">
+                 <div id="game-board"></div>
+                 <div id="restricted-zone-overlay"></div>
+            </div>
+            <div class="info-panel", id='info-panel'>
+                 <div class="info-item"> <span class="info-label">Score</span> <span id="score" class="info-value">0</span> </div>
+                 <div class="info-item"> <span class="info-label">Lines</span> <span id="lines" class="info-value">0</span> </div>
+                 <div class="info-item"> <span class="info-label">Speed (ms)</span> <span id="speed-display" class="info-value">0</span> </div>
+                 <div class="info-item"> <span class="info-label">Next</span> <div id="next-piece-preview" class="mx-auto" style="width: 80px; height: 80px; display: grid; grid-template-columns: repeat(4, 20px); grid-template-rows: repeat(4, 20px);"></div> </div>
+                 <div class="info-item" id="hold-item-container"> <span class="info-label">Hold</span> <div id="hold-piece-preview" class="mx-auto" style="width: 80px; height: 80px; display: grid; grid-template-columns: repeat(4, 20px); grid-template-rows: repeat(4, 20px);"></div> </div>
+                 <button id="restart-button" class="control-button"><b>R</b></button>
+                 <button id="btn-pause" class="control-button" title="Pause (P)" style="display: none;"> <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/pause.svg" alt="Pause" style="display: none;"/> </button>
+                 <button id="btn-shop" class="control-button" title="Shop (B)"> <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/shopping-cart.svg" alt="Shop"/> </button>
+            </div>
+            <div id="controls-container">
+                <button id="btn-rotate-l" class="control-button" title="Rotate CCW (Z)"> <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/rotate-ccw.svg" alt="Rotate Left"/> </button>
+                <button id="btn-left" class="control-button" title="Move Left (A/Left)"> <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/arrow-left.svg" alt="Left"/> </button>
+                <button id="btn-move-down" class="control-button" title="Move down (Down)"> <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/arrow-down.svg" alt="Down"/> </button>
+                <button id="btn-drop" class="control-button" title="Hard Drop (Space)"> <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/arrow-up.svg" alt="Drop"/> </button>
+                <button id="btn-right" class="control-button" title="Move Right (D/Right)"> <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/arrow-right.svg" alt="Right"/> </button>
+                <button id="btn-rotate-r" class="control-button" title="Rotate CW (X/Up/W)"> <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/rotate-cw.svg" alt="Rotate Right"/> </button>
+            </div>
+        </div>
+     </div>
+
+
+    <div id="message-box"> <p id="message-text"></p> <button id="message-button">OK</button> </div>
+
+    <div id="shop-modal">
+        <div class="shop-content">
+            <h2 class="shop-title">Item Shop</h2>
+            <p class="mb-4 text-sm text-gray-400">Press Esc or Close to resume game.</p>
+            <div class="shop-items" id="shop-items-container"></div>
+            <button id="shop-close-button" class="shop-close-button">Close</button>
+        </div>
+    </div>
+
+    <script>
+        // --- Game Configuration ---
+        const config = { /* ... */
+            BOARD_WIDTH: 10, BOARD_HEIGHT: 20, STARTING_SPEED: 1000, SPEED_INCREMENT_PER_LEVEL: 0.9, LINES_PER_LEVEL: 10, SCORE_MULTIPLIER: 1.0, POINTS_PER_LINE: [0, 100, 300, 500, 800], ALLOW_HOLD: true, SHOW_GHOST_PIECE: true, ALLOW_GARBAGE: true, DAS_DELAY: 160, ARR_INTERVAL: 50, SOFT_DROP_DAS_DELAY: 100, SOFT_DROP_ARR_INTERVAL: 30, LOCK_DELAY: 500, SHAKE_DURATION: 200, FLASH_DURATION_1: 150, FLASH_DURATION_2: 200, FLASH_DURATION_3: 250, FLASH_DURATION_TETRIS: 400, CELL_SIZE: 30, PREVIEW_CELL_SIZE: 20, MIN_GAME_SPEED: 50,
+            RISING_SPEED_FACTOR: 1.01, SHOP_ITEM_COST: 500,
+            SHOP_COST_INCREASE_FACTOR: 1.3,
+            TEMPORARY_MODIFIER_INTERVAL: 15000,
+            UI_TIMER_UPDATE_INTERVAL: 250,
+            NONE_MODIFIER_CHANCE: 0.2,
+            GLASS_CANNON_ROW_PENALTY: 4,
+        };
+
+        // --- Constants ---
+        const BOARD_BORDER_WIDTH = 3;
+        const DEFAULT_BOARD_COLOR = '#0f172a';
+        const NO_MODIFIER = { id: 'none', name: 'None', backgroundColor: DEFAULT_BOARD_COLOR };
+        const DEFAULT_PIECE_WEIGHTS = { T: 1, O: 1, L: 1, J: 1, I: 1, S: 1, Z: 1 };
+
+        // --- DOM Elements ---
+        const gameContainerElement = document.getElementById('game-container');
+        const boardAreaElement = document.getElementById('board-area'); // Get wrapper element
+        const gameBoardElement = document.getElementById('game-board'); // Keep for grid setup & cell append
+        const scoreElement = document.getElementById('score'); const linesElement = document.getElementById('lines');
+        const speedDisplayElement = document.getElementById('speed-display');
+        const nextPiecePreviewElement = document.getElementById('next-piece-preview'); const holdPiecePreviewElement = document.getElementById('hold-piece-preview');
+        const messageBox = document.getElementById('message-box'); const messageText = document.getElementById('message-text'); const messageButton = document.getElementById('message-button'); const restartButton = document.getElementById('restart-button');
+        const shopModalElement = document.getElementById('shop-modal'); const shopItemsContainerElement = document.getElementById('shop-items-container'); const shopCloseButton = document.getElementById('shop-close-button');
+        const temporaryModifierDisplay = document.getElementById('temporary-modifier-display');
+        const modifierTimerDisplay = document.getElementById('modifier-timer-display');
+        const restrictedZoneOverlay = document.getElementById('restricted-zone-overlay');
+        // Control Buttons
+        const btnPause = document.getElementById('btn-pause'); const btnRotateL = document.getElementById('btn-rotate-l'); const btnLeft = document.getElementById('btn-left'); const btnDrop = document.getElementById('btn-drop'); const btnRight = document.getElementById('btn-right'); const btnRotateR = document.getElementById('btn-rotate-r'); const btnShop = document.getElementById('btn-shop'); const btnDown = document.getElementById('btn-move-down');
+
+        // --- Game State ---
+        let board, currentPiece, nextPiece, heldPiece, canHold, score, linesCleared, level;
+        let baseGameSpeed; let effectiveGameSpeed;
+        let gameLoopInterval, isGameOver, isPaused;
+        let moveLeftHeld, moveRightHeld, moveDownHeld; let dasTimeoutLeft, dasTimeoutRight, dasTimeoutDown; let arrIntervalLeft, arrIntervalRight, arrIntervalDown;
+        let isShaking = false; let isFlashing = false; let lockDelayTimeout = null; let isPieceGrounded = false;
+        let isShopOpen = false; let currentShopItems = [];
+        let temporaryModifier = NO_MODIFIER; let temporaryModifierInterval = null;
+        let lastTemporaryModifierId = NO_MODIFIER.id;
+        let isFirstModifierCycle = true;
+        let nextModifierTimestamp = null; let uiTimerInterval = null; let pauseStartTime = null;
+        let purchasedThisVisit = false;
+
+        // --- Modifier State (Permanent & Temporary Flags/Values) ---
+        let modifiers = {};
+
+        function resetModifiers() {
+             modifiers = {
+                speedMultiplier: 1.0, lineScoreMultiplierBonus: 0.0, isTetrisSpecialistActive: false,
+                shopCostMultiplier: 1.0, isGamblerActive: false, purchasedItemCount: 0,
+                lockDelayMultiplier: 1.0, pieceWeights: { ...DEFAULT_PIECE_WEIGHTS },
+                restrictedTopRows: 0, glassCannonScoreMultiplier: 1.0,
+                shopCostIncreaseMultiplier: 1.0,
+                tempSpeedMultiplier: 1.0, tempLineScoreMultiplierBonus: 0.0, tempIsTetrisSpecialistActive: false,
+                tempIsGamblerActive: false, tempLockDelayMultiplier: 1.0, tempPieceWeights: null,
+                tempRestrictedTopRows: 0, tempGlassCannonScoreMultiplier: 1.0,
+                tempShopCostIncreaseMultiplier: 1.0,
+            };
+             updateRestrictedZoneUI();
+        }
+
+        // --- Item Pool Definition ---
+        const ITEM_POOL = [
+            { id: 'adrenaline', name: 'Adrenaline', cost: config.SHOP_ITEM_COST, description: '+50% score. Speed +20%.', backgroundColor: '#2f1a2e', applyEffect: () => { modifiers.lineScoreMultiplierBonus += 0.5; modifiers.speedMultiplier *= 0.8; }, applyTemporaryEffect: () => { modifiers.tempLineScoreMultiplierBonus = 0.5; modifiers.tempSpeedMultiplier = 0.8; return true; }, removeTemporaryEffect: () => { modifiers.tempLineScoreMultiplierBonus = 0.0; modifiers.tempSpeedMultiplier = 1.0; } },
+            { id: 'tetris_specialist', name: 'Tetris Specialist', cost: config.SHOP_ITEM_COST, description: 'Tetris score x3. Others /2.', backgroundColor: '#1a2e2e', applyEffect: () => { modifiers.isTetrisSpecialistActive = true; }, applyTemporaryEffect: () => { modifiers.tempIsTetrisSpecialistActive = true; return true; }, removeTemporaryEffect: () => { modifiers.tempIsTetrisSpecialistActive = false; } },
+            { id: 'economy', name: 'Economy', cost: config.SHOP_ITEM_COST, description: 'Shop costs -30%. (Garbage+ NYI)', backgroundColor: '#1a2a1a', applyEffect: () => { modifiers.shopCostMultiplier = 0.7; }, applyTemporaryEffect: () => { return true; }, removeTemporaryEffect: () => {} },
+            { id: 'gambler', name: 'Gambler', cost: config.SHOP_ITEM_COST, description: '50% chance: double score, 50% chance: zero score.', backgroundColor: '#2a2a1a', applyEffect: () => { modifiers.isGamblerActive = true; }, applyTemporaryEffect: () => { modifiers.tempIsGamblerActive = true; return true; }, removeTemporaryEffect: () => { modifiers.tempIsGamblerActive = false; } },
+            { id: 'rotation_master', name: 'Rotation Master', cost: config.SHOP_ITEM_COST, description: 'Lock delay x1.5. Speed +10%.', backgroundColor: '#1a1a2f', applyEffect: () => { modifiers.lockDelayMultiplier = 1.5; modifiers.speedMultiplier *= 0.9; }, applyTemporaryEffect: () => { modifiers.tempLockDelayMultiplier = 1.5; modifiers.tempSpeedMultiplier = 0.9; return true; }, removeTemporaryEffect: () => { modifiers.tempLockDelayMultiplier = 1.0; modifiers.tempSpeedMultiplier = 1.0; } },
+            { id: 'cursed', name: 'Cursed?', cost: config.SHOP_ITEM_COST, description: 'More I pieces! But also more S and Z pieces.', backgroundColor: '#2a1f1f', applyEffect: () => { modifiers.pieceWeights = { T: 0.5, O: 0.5, L: 0.5, J: 0.5, I: 2, S: 2, Z: 2 }; }, applyTemporaryEffect: () => { modifiers.tempPieceWeights = { T: 0.5, O: 0.5, L: 0.5, J: 0.5, I: 2, S: 2, Z: 2 }; return true; }, removeTemporaryEffect: () => { modifiers.tempPieceWeights = null; } },
+            { id: 'glass_cannon', name: 'Glass Cannon', cost: config.SHOP_ITEM_COST, description: 'Score x2. Top 4 rows blocked per purchase.', backgroundColor: '#2f1f1f', applyEffect: () => { modifiers.restrictedTopRows += config.GLASS_CANNON_ROW_PENALTY; modifiers.glassCannonScoreMultiplier *= 2; updateRestrictedZoneUI(); }, applyTemporaryEffect: () => { /* Safety check removed */ modifiers.tempRestrictedTopRows = config.GLASS_CANNON_ROW_PENALTY; modifiers.tempGlassCannonScoreMultiplier = 2.0; updateRestrictedZoneUI(); return true; }, removeTemporaryEffect: () => { modifiers.tempRestrictedTopRows = 0; modifiers.tempGlassCannonScoreMultiplier = 1.0; updateRestrictedZoneUI(); } },
+            { id: 'no_restrictions', name: 'No Restrictions', cost: config.SHOP_ITEM_COST, description: 'Reduce restriction by 1 row. Speed +30%, Shop Costs +40%.', backgroundColor: '#22222a', applyEffect: () => { modifiers.restrictedTopRows = Math.max(0, modifiers.restrictedTopRows - 1); modifiers.speedMultiplier *= (1 / 1.3); modifiers.shopCostIncreaseMultiplier *= 1.4; updateRestrictedZoneUI(); }, applyTemporaryEffect: () => { if (getTotalRestrictedRows() <= 0) return false; modifiers.tempRestrictedTopRows = -1; modifiers.tempSpeedMultiplier *= (1 / 1.3); modifiers.tempShopCostIncreaseMultiplier = 1.4; updateRestrictedZoneUI(); return true; }, removeTemporaryEffect: () => { modifiers.tempRestrictedTopRows = 0; modifiers.tempSpeedMultiplier /= (1 / 1.3); modifiers.tempShopCostIncreaseMultiplier = 1.0; updateRestrictedZoneUI(); } },
+        ];
+
+        // --- Tetromino Definitions ---
+        const TETROMINOS = { 'T': { shape: [[0, 1, 0], [1, 1, 1]], color: 'T' }, 'O': { shape: [[1, 1], [1, 1]], color: 'O' }, 'L': { shape: [[1, 0, 0], [1, 1, 1]], color: 'L' }, 'J': { shape: [[0, 0, 1], [1, 1, 1]], color: 'J' }, 'I': { shape: [[1, 1, 1, 1]], color: 'I' }, 'S': { shape: [[0, 1, 1], [1, 1, 0]], color: 'S' }, 'Z': { shape: [[1, 1, 0], [0, 1, 1]], color: 'Z' } };
+        const PIECE_KEYS = Object.keys(TETROMINOS);
+
+        // --- Game Functions ---
+        function createEmptyBoard() { return Array.from({ length: config.BOARD_HEIGHT }, () => Array(config.BOARD_WIDTH).fill(null)); }
+        function getRandomPieceType() { const weights = modifiers.tempPieceWeights || modifiers.pieceWeights; const total = PIECE_KEYS.reduce((s, k) => s + (weights[k] || 0), 0); if (total <= 0) return PIECE_KEYS[Math.floor(Math.random() * PIECE_KEYS.length)]; let r = Math.random() * total; for (const k of PIECE_KEYS) { const w = weights[k] || 0; if (r < w) return k; r -= w; } return PIECE_KEYS[PIECE_KEYS.length - 1]; }
+        function createPiece(type) { const d = TETROMINOS[type]; return { type: type, shape: d.shape.map(r => r.slice()), color: d.color, x: Math.floor(config.BOARD_WIDTH / 2) - Math.ceil(d.shape[0].length / 2), y: 0 }; }
+        function getTotalRestrictedRows() { return Math.max(0, modifiers.restrictedTopRows + modifiers.tempRestrictedTopRows); }
+
+        function updateRestrictedZoneUI() {
+            const totalRows = getTotalRestrictedRows();
+            const height = totalRows * config.CELL_SIZE;
+            console.log(`DEBUG: Updating restricted zone UI. Total Rows: ${totalRows}, Height: ${height}px`);
+            if (restrictedZoneOverlay) {
+                restrictedZoneOverlay.style.height = `${height}px`;
+                restrictedZoneOverlay.style.display = totalRows > 0 ? 'block' : 'none';
+            } else {
+                console.error("Restricted zone overlay element not found!");
+            }
+        }
+
+        // Removed isPiecePotentiallyBlocked function
+
+        function isValidMove(x, y, shape) {
+            // Removed restriction check from here
+            for (let r = 0; r < shape.length; r++) {
+                for (let c = 0; c < shape[r].length; c++) {
+                    if (shape[r][c]) {
+                        const bX = x + c;
+                        const bY = y + r;
+                        if (bX < 0 || bX >= config.BOARD_WIDTH || bY >= config.BOARD_HEIGHT) { return false; }
+                        if (bY >= 0 && board[bY][bX] !== null) { return false; }
+                    }
+                }
+            }
+            return true;
+        }
+
+        function clearLockDelay() { clearTimeout(lockDelayTimeout); lockDelayTimeout = null; isPieceGrounded = false; }
+        function tryLockPiece() { if (!currentPiece || isGameOver || isPaused) { clearLockDelay(); return; } if (!isValidMove(currentPiece.x, currentPiece.y + 1, currentPiece.shape)) { lockPiece(); } else { clearLockDelay(); } }
+        function startOrResetLockDelay() { clearLockDelay(); isPieceGrounded = true; const currentLockDelay = config.LOCK_DELAY * modifiers.lockDelayMultiplier * modifiers.tempLockDelayMultiplier; lockDelayTimeout = setTimeout(tryLockPiece, currentLockDelay); }
+        function rotatePiece(direction) { if (!currentPiece || currentPiece.type === 'O' || isPaused || isGameOver) return; const oS = currentPiece.shape; const rws = oS.length; const cls = oS[0].length; let nS; if (direction === 1) { nS = Array.from({ length: cls }, () => Array(rws).fill(0)); for (let r=0;r<rws;r++) for (let c=0;c<cls;c++) nS[c][rws-1-r] = oS[r][c]; } else if (direction === -1) { nS = Array.from({ length: cls }, () => Array(rws).fill(0)); for (let r=0;r<rws;r++) for (let c=0;c<cls;c++) nS[cls-1-c][r] = oS[r][c]; } else return; const kcks = [ { x: 0, y: 0 }, { x: direction * -1, y: 0 }, { x: direction * -1, y: -1 }, { x: 0, y: 2 }, { x: direction * -1, y: 2 } ]; let fVK = false; let fKX = 0, fKY = 0; for (const k of kcks) { if (isValidMove(currentPiece.x + k.x, currentPiece.y + k.y, nS)) { fKX = k.x; fKY = k.y; fVK = true; break; } } if (fVK) { currentPiece.shape = nS; currentPiece.x += fKX; currentPiece.y += fKY; if (isPieceGrounded) { if (isValidMove(currentPiece.x, currentPiece.y + 1, currentPiece.shape)) { clearLockDelay(); } else { startOrResetLockDelay(); } } drawBoard(); } }
+        function movePiece(dx, dy) { if (!currentPiece || isPaused || isGameOver) return false; const nX = currentPiece.x + dx; const nY = currentPiece.y + dy; if (isValidMove(nX, nY, currentPiece.shape)) { const wasGrounded = isPieceGrounded; currentPiece.x = nX; currentPiece.y = nY; if (dy > 0) { clearLockDelay(); } else if (dx !== 0 && wasGrounded) { if (isValidMove(currentPiece.x, currentPiece.y + 1, currentPiece.shape)) { clearLockDelay(); } else { startOrResetLockDelay(); } } return true; } else if (dx === 0 && dy === 1 && !isPieceGrounded) { startOrResetLockDelay(); return false; } return false; }
+        function getGhostPieceY() { if (!currentPiece || !config.SHOW_GHOST_PIECE) return -1; let gY = currentPiece.y; while (isValidMove(currentPiece.x, gY + 1, currentPiece.shape)) gY++; return gY; }
+        function triggerShake() { if (!isShaking) { isShaking = true; gameContainerElement.classList.add('screen-shake'); setTimeout(() => { gameContainerElement.classList.remove('screen-shake'); isShaking = false; }, config.SHAKE_DURATION); } }
+        function triggerFlash(linesCount) { if (isFlashing || linesCount <= 0) return; let fC = '', dur = 0; switch (linesCount) { case 1: fC = 'flash-1'; dur = config.FLASH_DURATION_1; break; case 2: fC = 'flash-2'; dur = config.FLASH_DURATION_2; break; case 3: fC = 'flash-3'; dur = config.FLASH_DURATION_3; break; default: fC = 'flash-tetris'; dur = config.FLASH_DURATION_TETRIS; break; } isFlashing = true; gameBoardElement.classList.add(fC); setTimeout(() => { gameBoardElement.classList.remove(fC); isFlashing = false; }, dur); }
+        function hardDrop() { if (!currentPiece || isPaused || isGameOver) return; clearLockDelay(); const sY = currentPiece.y; while (movePiece(0, 1)) { } const eY = currentPiece.y; if (eY > sY) { triggerShake(); } lockPiece(); drawBoard(); }
+
+        function lockPiece() {
+            if (!currentPiece) return;
+            // Removed initial restriction check
+
+            clearLockDelay();
+            // Place piece on board
+            for (let r = 0; r < currentPiece.shape.length; r++) for (let c = 0; c < currentPiece.shape[r].length; c++) if (currentPiece.shape[r][c]) { const bX = currentPiece.x + c, bY = currentPiece.y + r; if (bY < 0) { /* Standard top-out */ gameOver(); return; } if(bY < config.BOARD_HEIGHT && bX < config.BOARD_WIDTH) { board[bY][bX] = currentPiece.color; } }
+
+            clearHorizontalMovement(true); clearHorizontalMovement(false); clearVerticalMovement();
+
+            if (!isGameOver) {
+                baseGameSpeed = Math.max(config.MIN_GAME_SPEED, Math.floor(baseGameSpeed / config.RISING_SPEED_FACTOR));
+                updateGameSpeed();
+                console.log(`Piece locked. New base speed interval: ${baseGameSpeed}, Effective: ${effectiveGameSpeed}`);
+
+                const lC = clearLines(); // Clear lines first
+
+                 // --- New Glass Cannon Game Over Check (Post-Lock, Post-Clear) ---
+                 const restrictedRows = getTotalRestrictedRows();
+                 if (restrictedRows > 0) {
+                     for (let y = 0; y < restrictedRows; y++) { // Check rows from 0 up to (but not including) restrictedRows
+                         for (let x = 0; x < config.BOARD_WIDTH; x++) {
+                             if (board[y][x] !== null) { // Check if any locked block exists in the restricted zone
+                                 console.log(`Game Over: Locked block found at (${x}, ${y}) within restricted zone (< ${restrictedRows})`);
+                                 gameOver();
+                                 return; // Exit lockPiece
+                             }
+                         }
+                     }
+                 }
+                 // --- End New Check ---
+
+
+                if (!isGameOver) { // Check again in case the stack check caused game over
+                    spawnNewPiece();
+                }
+                canHold = true;
+                drawBoard();
+            } else {
+                drawBoard();
+            }
+        }
+
+        function clearLines() {
+            let linesToClear = [];
+            for (let y = config.BOARD_HEIGHT - 1; y >= 0; y--) { if (board[y].every(c => c !== null) && !board[y].every(c => c === 'garbage')) linesToClear.push(y); }
+            const linesCount = linesToClear.length;
+            if (linesCount > 0) {
+                triggerFlash(linesCount);
+                linesToClear.sort((a, b) => a - b);
+                for (let i = linesCount - 1; i >= 0; i--) board.splice(linesToClear[i], 1);
+                for (let i = 0; i < linesCount; i++) board.unshift(Array(config.BOARD_WIDTH).fill(null));
+                let basePoints = config.POINTS_PER_LINE[linesCount] || 0;
+                let currentScoreMultiplier = config.SCORE_MULTIPLIER * (1 + modifiers.lineScoreMultiplierBonus + modifiers.tempLineScoreMultiplierBonus);
+                if (modifiers.isTetrisSpecialistActive || modifiers.tempIsTetrisSpecialistActive) { if (linesCount === 4) { currentScoreMultiplier *= 3; } else { currentScoreMultiplier *= 0.5; } }
+                let gamblerMultiplier = 1.0;
+                if (modifiers.isGamblerActive || modifiers.tempIsGamblerActive) { if (Math.random() < 0.5) { gamblerMultiplier = 2.0; console.log("Gambler: Double Score!"); } else { gamblerMultiplier = 0.0; console.log("Gambler: Zero Score!"); } }
+                let glassCannonMult = (modifiers.glassCannonScoreMultiplier || 1.0) * (modifiers.tempGlassCannonScoreMultiplier || 1.0);
+                let finalScore = basePoints * currentScoreMultiplier * level * gamblerMultiplier * glassCannonMult;
+                score += Math.floor(finalScore);
+                linesCleared += linesCount;
+                const newLevel = Math.floor(linesCleared / config.LINES_PER_LEVEL) + 1;
+                let levelUpOccurred = false;
+                if (newLevel > level) { level = newLevel; baseGameSpeed = config.STARTING_SPEED * Math.pow(config.SPEED_INCREMENT_PER_LEVEL, level - 1); levelUpOccurred = true; }
+                updateGameSpeed(); updateInfoPanel();
+            }
+            return linesCount;
+        }
+
+        function addGarbageLines(count, holePos = -1) { if (!config.ALLOW_GARBAGE || count <= 0 || isPaused || isGameOver) return; console.log(`Adding ${count} garbage line(s)`); for (let i = 0; i < count; i++) { board.shift(); const nL = Array(config.BOARD_WIDTH).fill('garbage'); const hC = holePos === -1 ? Math.floor(Math.random() * config.BOARD_WIDTH) : holePos % config.BOARD_WIDTH; nL[hC] = null; board.push(nL); } if (currentPiece && !isValidMove(currentPiece.x, currentPiece.y, currentPiece.shape)) { if (isValidMove(currentPiece.x, currentPiece.y - 1, currentPiece.shape)) currentPiece.y--; else if (isValidMove(currentPiece.x, currentPiece.y - 2, currentPiece.shape)) currentPiece.y -= 2; else console.warn("Piece conflict after adding garbage lines."); } drawBoard(); }
+
+        function spawnNewPiece() {
+            if (isGameOver) return;
+            clearLockDelay();
+            currentPiece = createPiece(nextPiece.type);
+            nextPiece = createPiece(getRandomPieceType());
+            console.log("Spawn Cycle: Was Next:", currentPiece.type, "| Just Spawned:", currentPiece.type, "| New Next:", nextPiece.type);
+            updateNextPiecePreview();
+
+            // Standard spawn check
+            if (!isValidMove(currentPiece.x, currentPiece.y, currentPiece.shape)) {
+                 console.log(`Game Over: Piece spawn invalid at x=${currentPiece.x}, y=${currentPiece.y}. (Not restriction related)`);
+                currentPiece = null;
+                gameOver();
+            }
+        }
+
+        function holdPiece() { if (!config.ALLOW_HOLD || !canHold || !currentPiece || isPaused || isGameOver) return; clearLockDelay(); const prevH = heldPiece; heldPiece = createPiece(currentPiece.type); updateHoldPiecePreview(); clearHorizontalMovement(true); clearHorizontalMovement(false); clearVerticalMovement(); if (prevH) { currentPiece = createPiece(prevH.type); currentPiece.x = Math.floor(config.BOARD_WIDTH / 2) - Math.ceil(currentPiece.shape[0].length / 2); currentPiece.y = 0; if (!isValidMove(currentPiece.x, currentPiece.y, currentPiece.shape)) gameOver(); } else { spawnNewPiece(); } canHold = false; drawBoard(); }
+        function drawBoard() {
+            if (!gameBoardElement) return;
+            requestAnimationFrame(() => {
+                config.CELL_SIZE = (document.getElementById('game-container').offsetWidth - BOARD_BORDER_WIDTH * 2 - document.getElementById('info-panel').offsetWidth) / config.BOARD_WIDTH * 0.8;
+                
+                // --- Board Size Calculation (Set on Wrapper) ---
+                const totalWidth = ((config.BOARD_WIDTH * config.CELL_SIZE) + (BOARD_BORDER_WIDTH * 2));
+                const totalHeight = (config.BOARD_HEIGHT * config.CELL_SIZE) + (BOARD_BORDER_WIDTH * 2);
+                if (boardAreaElement) { // Check if wrapper exists
+                    boardAreaElement.style.width = `${totalWidth}px`;
+                    boardAreaElement.style.height = `${totalHeight}px`;
+                } else { console.error("Board Area element not found!"); }
+
+                // Set grid template on the actual board
+                gameBoardElement.style.gridTemplateColumns = `repeat(${config.BOARD_WIDTH}, ${config.CELL_SIZE}px)`;
+                gameBoardElement.style.gridTemplateRows = `repeat(${config.BOARD_HEIGHT}, ${config.CELL_SIZE}px)`;
+
+                // --- End Board Size ---
+
+                if(isGameOver && !currentPiece) { gameBoardElement.innerHTML = ''; for (let y=0;y<config.BOARD_HEIGHT; y++) for(let x=0;x<config.BOARD_WIDTH;x++) {const c=document.createElement('div');c.classList.add('cell');c.style.width=`${config.CELL_SIZE}px`;c.style.height=`${config.CELL_SIZE}px`;c.style.backgroundColor='#333';gameBoardElement.appendChild(c);} return; }
+                gameBoardElement.innerHTML = ''; // Clear only grid cells container
+
+                const gY = getGhostPieceY(); const cells = [];
+                for (let y=0;y<config.BOARD_HEIGHT;y++) for(let x=0;x<config.BOARD_WIDTH;x++) {const c=document.createElement('div');c.classList.add('cell');c.style.width=`${config.CELL_SIZE}px`;c.style.height=`${config.CELL_SIZE}px`;if(board[y][x])c.classList.add(board[y][x]);cells.push(c);gameBoardElement.appendChild(c);}
+                if (currentPiece && config.SHOW_GHOST_PIECE && gY !== -1) { currentPiece.shape.forEach((row, r) => row.forEach((val, c) => { if (val) { const bX = currentPiece.x + c, bY = gY + r; if (isValidMove(bX, bY, [[1]])) { const idx = bY * config.BOARD_WIDTH + bX; if (cells[idx] && !board[bY][bX]) cells[idx].classList.add('ghost'); } } })); }
+                if (currentPiece) { currentPiece.shape.forEach((row, r) => row.forEach((val, c) => { if (val) { const bX = currentPiece.x + c, bY = currentPiece.y + r; if (bY >= 0 && bY < config.BOARD_HEIGHT && bX >= 0 && bX < config.BOARD_WIDTH) { const idx = bY * config.BOARD_WIDTH + bX; if (cells[idx]) { cells[idx].className = 'cell'; cells[idx].classList.add(currentPiece.color); cells[idx].style.width = `${config.CELL_SIZE}px`; cells[idx].style.height = `${config.CELL_SIZE}px`; } } } })); }
+            });
+        }
+        function drawPreview(element, piece) { element.innerHTML = ''; element.style.gridTemplateColumns = `repeat(4, ${config.PREVIEW_CELL_SIZE}px)`; element.style.gridTemplateRows = `repeat(4, ${config.PREVIEW_CELL_SIZE}px)`; if (piece) { const { shape: s, color: clr } = piece; const h = s.length, w = s[0].length; const oX = Math.floor((4 - w) / 2), oY = Math.floor((4 - h) / 2); for (let r=0;r<4;r++) for(let c=0;c<4;c++) {const cell=document.createElement('div');cell.style.width=`${config.PREVIEW_CELL_SIZE}px`;cell.style.height=`${config.PREVIEW_CELL_SIZE}px`;cell.style.borderRadius='2px';const sR=r-oY,sC=c-oX;if(sR>=0&&sR<h&&sC>=0&&sC<w&&s[sR][sC])cell.classList.add(clr);else cell.style.backgroundColor='transparent';element.appendChild(cell);} } else { for(let i=0;i<16;i++){const c=document.createElement('div');c.style.width=`${config.PREVIEW_CELL_SIZE}px`;c.style.height=`${config.PREVIEW_CELL_SIZE}px`;c.style.backgroundColor='transparent';element.appendChild(c);} } }
+        function updateNextPiecePreview() { drawPreview(nextPiecePreviewElement, nextPiece); } function updateHoldPiecePreview() { drawPreview(holdPiecePreviewElement, heldPiece); }
+
+        function updateInfoPanel() {
+            scoreElement.textContent = score;
+            linesElement.textContent = linesCleared;
+            speedDisplayElement.textContent = effectiveGameSpeed;
+        }
+
+        function updateGameSpeed() {
+            let combinedSpeedMultiplier = modifiers.speedMultiplier * modifiers.tempSpeedMultiplier;
+            effectiveGameSpeed = Math.max(config.MIN_GAME_SPEED, Math.floor(baseGameSpeed * combinedSpeedMultiplier));
+            clearInterval(gameLoopInterval);
+            if (!isGameOver && !isPaused) {
+                gameLoopInterval = setInterval(gameLoop, effectiveGameSpeed);
+            }
+            console.log(`Updating speed. Base: ${baseGameSpeed}, PermMod: ${modifiers.speedMultiplier}, TempMod: ${modifiers.tempSpeedMultiplier}, Effective: ${effectiveGameSpeed}`);
+            if(speedDisplayElement) { speedDisplayElement.textContent = effectiveGameSpeed; }
+        }
+
+        function showMessage(text, btnText, cb) { messageText.textContent = text; messageButton.textContent = btnText; messageButton.onclick = () => { messageBox.style.display = 'none'; if (cb) cb(); }; messageBox.style.display = 'block'; }
+        function pauseGame(showMsg = true) { if (isPaused || isGameOver) return; isPaused = true; pauseStartTime = Date.now(); clearInterval(gameLoopInterval); clearInterval(temporaryModifierInterval); clearInterval(uiTimerInterval); clearHorizontalMovement(true); clearHorizontalMovement(false); clearVerticalMovement(); clearLockDelay(); if (showMsg) { showMessage('Paused', 'Resume', resumeGame); } console.log("Game Paused"); }
+        function resumeGame() { if (!isPaused || isGameOver) return; isPaused = false; if (pauseStartTime && nextModifierTimestamp) { const pauseDuration = Date.now() - pauseStartTime; nextModifierTimestamp += pauseDuration; } pauseStartTime = null; messageBox.style.display = 'none'; updateGameSpeed(); if (temporaryModifierInterval !== null) { const remainingTime = nextModifierTimestamp ? Math.max(0, nextModifierTimestamp - Date.now()) : config.TEMPORARY_MODIFIER_INTERVAL; clearInterval(temporaryModifierInterval); temporaryModifierInterval = setTimeout(() => { cycleTemporaryModifier(); clearInterval(temporaryModifierInterval); temporaryModifierInterval = setInterval(cycleTemporaryModifier, config.TEMPORARY_MODIFIER_INTERVAL); }, remainingTime); } if (uiTimerInterval !== null) { clearInterval(uiTimerInterval); uiTimerInterval = setInterval(updateUITimer, config.UI_TIMER_UPDATE_INTERVAL); } console.log("Game Resumed"); }
+        function togglePause() { if (isShopOpen) return; if (isPaused) { resumeGame(); } else { pauseGame(true); } }
+        function gameOver() { if (isGameOver) return; isGameOver = true; clearInterval(gameLoopInterval); clearInterval(temporaryModifierInterval); clearInterval(uiTimerInterval); clearHorizontalMovement(true); clearHorizontalMovement(false); clearVerticalMovement(); clearLockDelay(); showMessage(`Game Over!\nScore: ${score}`, 'Restart', startGame); console.log("Game Over!"); drawBoard(); }
+        function gameLoop() { if (isGameOver || isPaused || !currentPiece) return; if (!arrIntervalDown && !lockDelayTimeout) { if (!movePiece(0, 1)) { } else { drawBoard(); } } }
+
+        // --- Temporary Modifier Logic ---
+        function cycleTemporaryModifier() {
+            if (isPaused || isGameOver) return;
+
+            if (isFirstModifierCycle) {
+                temporaryModifier = NO_MODIFIER;
+                lastTemporaryModifierId = NO_MODIFIER.id;
+                isFirstModifierCycle = false;
+                console.log("Applying initial temp modifier: None");
+            } else {
+                if (temporaryModifier && temporaryModifier.removeTemporaryEffect) {
+                    console.log(`Removing temp modifier: ${temporaryModifier.name}`);
+                    temporaryModifier.removeTemporaryEffect();
+                }
+
+                if (Math.random() < config.NONE_MODIFIER_CHANCE) {
+                    temporaryModifier = NO_MODIFIER;
+                    console.log("Applying temp modifier: None");
+                } else {
+                    const possibleItems = ITEM_POOL.filter(item => item.id !== lastTemporaryModifierId);
+                    let selectedItem;
+                    if (possibleItems.length > 0) {
+                        const randomIndex = Math.floor(Math.random() * possibleItems.length);
+                        selectedItem = possibleItems[randomIndex];
+                    } else {
+                        selectedItem = ITEM_POOL.length > 0 ? ITEM_POOL[0] : NO_MODIFIER;
+                    }
+
+                    // Apply effect - Removed safety check for Glass Cannon here
+                    if (selectedItem.applyTemporaryEffect) {
+                         temporaryModifier = selectedItem;
+                         temporaryModifier.applyTemporaryEffect(); // Assume it applies successfully
+                         console.log(`Applying temp modifier: ${temporaryModifier.name}`);
+                    } else {
+                         temporaryModifier = NO_MODIFIER; // Default to None if no temp effect function
+                    }
+                }
+                lastTemporaryModifierId = temporaryModifier.id;
+            }
+
+            temporaryModifierDisplay.textContent = `Modifier: ${temporaryModifier.name}`;
+            gameBoardElement.style.backgroundColor = temporaryModifier.backgroundColor || DEFAULT_BOARD_COLOR;
+            updateRestrictedZoneUI();
+
+            if (!isFirstModifierCycle && config.ALLOW_GARBAGE) { addGarbageLines(1); }
+
+            nextModifierTimestamp = Date.now() + config.TEMPORARY_MODIFIER_INTERVAL;
+            updateGameSpeed();
+            updateUITimer();
+        }
+
+
+        // --- UI Timer Update ---
+        function updateUITimer() {
+            if (isPaused || isGameOver || !nextModifierTimestamp) {
+                modifierTimerDisplay.textContent = ""; return;
+            }
+            const now = Date.now();
+            const timeLeft = Math.max(0, Math.ceil((nextModifierTimestamp - now) / 1000));
+            modifierTimerDisplay.textContent = `(Next in: ${timeLeft}s)`;
+        }
+
+        // --- Shop Logic ---
+        function openShop() { /* Reverted to standard random shop logic */ if (isGameOver || isShopOpen || isPaused) return; console.log("Opening Shop..."); pauseGame(false); isShopOpen = true; currentShopItems = []; purchasedThisVisit = false; /* Reset purchase limit flag */ let activeTempItem = null; if (temporaryModifier && temporaryModifier.id !== NO_MODIFIER.id) { activeTempItem = ITEM_POOL.find(item => item.id === temporaryModifier.id); if (activeTempItem) { currentShopItems.push(activeTempItem); } } const availableItems = ITEM_POOL.filter(item => { if (item.id === temporaryModifier?.id) return false; if (item.id === 'no_restrictions' && getTotalRestrictedRows() <= 0) return false; return true; }); while (currentShopItems.length < 2 && availableItems.length > 0) { const randomIndex = Math.floor(Math.random() * availableItems.length); const newItem = availableItems.splice(randomIndex, 1)[0]; if (!currentShopItems.some(existing => existing.id === newItem.id)) { currentShopItems.push(newItem); } } if (currentShopItems.length < 2 && ITEM_POOL.length > currentShopItems.length) { const fallbackItems = ITEM_POOL.filter(item => !currentShopItems.some(existing => existing.id === item.id) && !(item.id === 'no_restrictions' && getTotalRestrictedRows() <= 0) ); if (fallbackItems.length > 0) { currentShopItems.push(fallbackItems[Math.floor(Math.random() * fallbackItems.length)]); } } currentShopItems = currentShopItems.slice(0, 2); populateShopUI(); shopModalElement.style.display = 'flex'; }
+        function closeShop() { if (!isShopOpen) return; console.log("Closing Shop..."); isShopOpen = false; shopModalElement.style.display = 'none'; resumeGame(); }
+        function populateShopUI() {
+            shopItemsContainerElement.innerHTML = '';
+            if (currentShopItems.length === 0) { shopItemsContainerElement.innerHTML = '<p>No items available!</p>'; return; }
+
+            currentShopItems.forEach((item, index) => {
+                const itemCard = document.createElement('div');
+                itemCard.className = 'shop-item-card';
+
+                const currentBaseCost = config.SHOP_ITEM_COST * Math.pow(config.SHOP_COST_INCREASE_FACTOR, modifiers.purchasedItemCount);
+                // Include No Restrictions cost increase multiplier
+                const displayCost = Math.floor(currentBaseCost * modifiers.shopCostMultiplier * modifiers.shopCostIncreaseMultiplier * modifiers.tempShopCostIncreaseMultiplier);
+
+
+                const isActiveTemporary = temporaryModifier && item.id !== NO_MODIFIER.id && item.id === temporaryModifier.id && index === 0;
+                if (isActiveTemporary) {
+                    itemCard.classList.add('shop-item-active');
+                    const activeLabel = document.createElement('div');
+                    activeLabel.className = 'shop-item-active-label';
+                    activeLabel.textContent = 'Active Effect';
+                    itemCard.appendChild(activeLabel);
+                }
+
+                const nameEl = document.createElement('div'); nameEl.className = 'shop-item-name'; nameEl.textContent = item.name;
+                const descEl = document.createElement('div'); descEl.className = 'shop-item-desc'; descEl.textContent = item.description;
+                const costEl = document.createElement('div'); costEl.className = 'shop-item-cost'; costEl.textContent = `Cost: ${displayCost}`;
+                const buyButton = document.createElement('button'); buyButton.className = 'shop-buy-button'; buyButton.textContent = 'Buy'; buyButton.dataset.itemId = item.id; buyButton.dataset.itemIndex = index;
+                // Disable button if cannot afford OR if an item was already bought this visit
+                buyButton.disabled = score < displayCost || purchasedThisVisit;
+                buyButton.onclick = () => buyItem(item.id, displayCost);
+
+                itemCard.appendChild(nameEl); itemCard.appendChild(descEl); itemCard.appendChild(costEl); itemCard.appendChild(buyButton);
+                shopItemsContainerElement.appendChild(itemCard);
+            });
+        }
+
+        function buyItem(itemId, purchaseCost) {
+            // Check if already purchased this visit
+            if (purchasedThisVisit) {
+                console.log("Already purchased an item this visit.");
+                showMessage("You can only buy one item per shop visit.", "OK");
+                return;
+            }
+
+            const itemIndex = currentShopItems.findIndex(item => item.id === itemId);
+            if (itemIndex === -1) return;
+            const item = currentShopItems[itemIndex];
+
+            // Removed pre-purchase check for Glass Cannon
+
+            if (score >= purchaseCost) {
+                console.log(`Buying item: ${item.name} for ${purchaseCost}`);
+                score -= purchaseCost;
+                item.applyEffect(); // Apply permanent effect
+                modifiers.purchasedItemCount++;
+                purchasedThisVisit = true; // Set flag for this visit
+                updateInfoPanel();
+
+                // Disable ALL buy buttons after purchase
+                const buyButtons = shopItemsContainerElement.querySelectorAll('.shop-buy-button');
+                buyButtons.forEach(button => {
+                    button.disabled = true;
+                    // Optionally change text on the bought button
+                    if (button.dataset.itemId === itemId) {
+                         button.textContent = 'Bought';
+                    }
+                });
+
+            } else {
+                console.log(`Cannot afford item: ${item.name} (Cost: ${purchaseCost})`);
+                 showMessage(`Cannot afford ${item.name}.\nNeed ${purchaseCost}, have ${score}.`, "OK");
+            }
+        }
+
+        // --- Input Handling ---
+        function clearHorizontalMovement(isLeft) { if (isLeft) { clearTimeout(dasTimeoutLeft); clearInterval(arrIntervalLeft); dasTimeoutLeft = null; arrIntervalLeft = null; moveLeftHeld = false; } else { clearTimeout(dasTimeoutRight); clearInterval(arrIntervalRight); dasTimeoutRight = null; arrIntervalRight = null; moveRightHeld = false; } } function clearVerticalMovement() { clearTimeout(dasTimeoutDown); clearInterval(arrIntervalDown); dasTimeoutDown = null; arrIntervalDown = null; moveDownHeld = false; } function startHorizontalArr(isLeft) { const dir = isLeft ? -1 : 1; const intId = setInterval(() => { if (movePiece(dir, 0)) drawBoard(); }, config.ARR_INTERVAL); if (isLeft) arrIntervalLeft = intId; else arrIntervalRight = intId; } function startVerticalArr() { arrIntervalDown = setInterval(() => { if (!movePiece(0, 1)) { clearVerticalMovement(); } else { drawBoard(); } }, config.SOFT_DROP_ARR_INTERVAL); }
+
+        function handleKeyDown(event) {
+            if (event.key === 'Escape' && isShopOpen) { closeShop(); return; }
+            if (event.key === 'b' || event.key === 'B') { if (isShopOpen) { closeShop(); } else { openShop(); } return; }
+            if (isShopOpen) return;
+            if (event.key === 'p' || event.key === 'P') { togglePause(); return; }
+            if (isGameOver || isPaused || !currentPiece) return;
+
+            const key = event.key;
+            const pieceType = currentPiece.type;
+
+            if (key === 'ArrowLeft' || key === 'a') { if (!moveLeftHeld) { moveLeftHeld = true; clearHorizontalMovement(false); if (movePiece(-1, 0)) drawBoard(); dasTimeoutLeft = setTimeout(() => { if (moveLeftHeld) startHorizontalArr(true); }, config.DAS_DELAY); } event.preventDefault(); }
+            else if (key === 'ArrowRight' || key === 'd') { if (!moveRightHeld) { moveRightHeld = true; clearHorizontalMovement(true); if (movePiece(1, 0)) drawBoard(); dasTimeoutRight = setTimeout(() => { if (moveRightHeld) startHorizontalArr(false); }, config.DAS_DELAY); } event.preventDefault(); }
+            else if (key === 'ArrowDown' || key === 's') { if (!moveDownHeld) { moveDownHeld = true; if (movePiece(0, 1)) { drawBoard(); dasTimeoutDown = setTimeout(() => { if (moveDownHeld) startVerticalArr(); }, config.SOFT_DROP_DAS_DELAY); } } event.preventDefault(); }
+            else if (key === 'ArrowUp' || key === 'w' || key === 'x') { rotatePiece(1); } // CW
+            else if (key === 'z') { rotatePiece(-1); } // CCW
+            else if (key === ' ') { hardDrop(); }
+            else if (key === 'Shift' || key === 'c') { holdPiece(); }
+            // else if (key === 'l') { /* Debug Level up removed */ }
+        }
+
+        function handleKeyUp(event) { if (isShopOpen || isGameOver || isPaused) return; const key = event.key; if (key === 'ArrowLeft' || key === 'a') clearHorizontalMovement(true); else if (key === 'ArrowRight' || key === 'd') clearHorizontalMovement(false); else if (key === 'ArrowDown' || key === 's') clearVerticalMovement(); }
+
+        function startGame() {
+            console.log("Starting Game...");
+            board = createEmptyBoard(); score = 0; linesCleared = 0; level = 1;
+            baseGameSpeed = config.STARTING_SPEED;
+            isGameOver = false; isPaused = false; isShopOpen = false;
+            canHold = true; heldPiece = null;
+
+            resetModifiers(); // Reset permanent item effects & temporary flags
+
+            temporaryModifier = NO_MODIFIER; // Start with None
+            lastTemporaryModifierId = NO_MODIFIER.id; // Reset last modifier tracking
+            isFirstModifierCycle = true; // Ensure first cycle is handled correctly
+            clearInterval(temporaryModifierInterval);
+            clearInterval(uiTimerInterval);
+            temporaryModifierDisplay.textContent = 'Modifier: None';
+            modifierTimerDisplay.textContent = '';
+            gameBoardElement.style.backgroundColor = DEFAULT_BOARD_COLOR;
+            updateRestrictedZoneUI(); // Reset overlay
+
+            clearHorizontalMovement(true); clearHorizontalMovement(false); clearVerticalMovement(); clearLockDelay();
+            shopModalElement.style.display = 'none'; messageBox.style.display = 'none';
+            nextPiece = createPiece(getRandomPieceType()); // Generate initial next piece
+            spawnNewPiece(); // Spawn first piece, generate second next piece
+            clearInterval(gameLoopInterval);
+            updateGameSpeed();
+            updateInfoPanel();
+            updateHoldPiecePreview(); drawBoard();
+
+            nextModifierTimestamp = Date.now() + config.TEMPORARY_MODIFIER_INTERVAL;
+            // Start interval normally, first cycle logic handled inside cycleTemporaryModifier
+            temporaryModifierInterval = setInterval(cycleTemporaryModifier, config.TEMPORARY_MODIFIER_INTERVAL);
+            uiTimerInterval = setInterval(updateUITimer, config.UI_TIMER_UPDATE_INTERVAL);
+            updateUITimer();
+        }
+
+      function addButtonListeners() {
+          // Блокируем контекстное меню для всех кнопок
+          const allButtons = [
+              btnPause, btnRotateL, btnLeft, btnDrop, 
+              btnDown, btnRight, btnRotateR, btnShop, 
+              holdPiecePreviewElement
+          ].filter(Boolean);
+          
+          allButtons.forEach(button => {
+              button.addEventListener('contextmenu', (e) => e.preventDefault());
+          });
+
+          // Простая обработка touchstart/touchend вместо click
+          btnPause.addEventListener('touchstart', (e) => {
+              e.preventDefault();
+              togglePause();
+          });
+          btnPause.addEventListener('click', togglePause);
+
+          // Кнопки движения с поддержкой удержания
+          let moveLeftInterval, moveRightInterval, moveDownInterval;
+
+          // Влево
+          btnLeft.addEventListener('touchstart', (e) => {
+              e.preventDefault();
+              movePiece(-1, 0);
+              drawBoard();
+              clearInterval(moveLeftInterval);
+              moveLeftInterval = setInterval(() => {
+                  movePiece(-1, 0);
+                  drawBoard();
+              }, 100); // Интервал повторения
+          });
+          
+          btnLeft.addEventListener('touchend', () => {
+              clearInterval(moveLeftInterval);
+          });
+          
+          // C обычным кликом для десктопа
+          btnLeft.addEventListener('click', () => {
+              movePiece(-1, 0);
+              drawBoard();
+          });
+
+          // Вправо
+          btnRight.addEventListener('touchstart', (e) => {
+              e.preventDefault();
+              movePiece(1, 0);
+              drawBoard();
+              clearInterval(moveRightInterval);
+              moveRightInterval = setInterval(() => {
+                  movePiece(1, 0);
+                  drawBoard();
+              }, 100);
+          });
+          
+          btnRight.addEventListener('touchend', () => {
+              clearInterval(moveRightInterval);
+          });
+          
+          btnRight.addEventListener('click', () => {
+              movePiece(1, 0);
+              drawBoard();
+          });
+
+          // Вниз
+          btnDown.addEventListener('touchstart', (e) => {
+              e.preventDefault();
+              movePiece(0, 1);
+              drawBoard();
+              clearInterval(moveDownInterval);
+              moveDownInterval = setInterval(() => {
+                  movePiece(0, 1);
+                  drawBoard();
+              }, 100);
+          });
+          
+          btnDown.addEventListener('touchend', () => {
+              clearInterval(moveDownInterval);
+          });
+          
+          btnDown.addEventListener('click', () => {
+              movePiece(0, 1);
+              drawBoard();
+          });
+
+          // Остальные кнопки с предотвращением контекстного меню
+          btnRotateL.addEventListener('touchstart', (e) => {
+              e.preventDefault();
+              rotatePiece(-1);
+          });
+          btnRotateL.addEventListener('click', () => rotatePiece(-1));
+
+          btnRotateR.addEventListener('touchstart', (e) => {
+              e.preventDefault();
+              rotatePiece(1);
+          });
+          btnRotateR.addEventListener('click', () => rotatePiece(1));
+
+          btnDrop.addEventListener('touchstart', (e) => {
+              e.preventDefault();
+              hardDrop();
+          });
+          btnDrop.addEventListener('click', hardDrop);
+
+          btnShop.addEventListener('touchstart', (e) => {
+              e.preventDefault();
+              isShopOpen ? closeShop() : openShop();
+          });
+          btnShop.addEventListener('click', () => {
+              isShopOpen ? closeShop() : openShop();
+          });
+
+          if(holdPiecePreviewElement) {
+              holdPiecePreviewElement.addEventListener('touchstart', (e) => {
+                  e.preventDefault();
+                  if(!isPaused && !isShopOpen && !isGameOver) holdPiece();
+              });
+              holdPiecePreviewElement.addEventListener('click', () => {
+                  if(!isPaused && !isShopOpen && !isGameOver) holdPiece();
+              });
+          }
+      }
+
+      // Также добавьте остановку всех интервалов при паузе и завершении игры
+      function stopAllIntervals() {
+          const intervals = window.gameIntervals || [];
+          intervals.forEach(clearInterval);
+          window.gameIntervals = [];
+      }
+
+        // --- Event Listeners ---
+        document.addEventListener('keydown', handleKeyDown);
+        document.addEventListener('keyup', handleKeyUp);
+        document.addEventListener('contextmenu', function(event) {
+            event.preventDefault();
+        }, false);
+        restartButton.addEventListener('click', startGame);
+        shopCloseButton.addEventListener('click', closeShop);
+        addButtonListeners(); // Call function to add button listeners
+
+        // --- Initial Game Start ---
+        startGame();
+    </script>
+</body>
+</html>
+
