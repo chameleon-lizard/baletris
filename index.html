@@ -460,9 +460,7 @@
                 const comboMultiplier = 1 + (comboCount * 0.05);
                 let finalScore = basePoints * currentScoreMultiplier * level * gamblerMultiplier * glassCannonMult * comboMultiplier;
                 score += Math.floor(finalScore);
-                if (linesCount > 0) {
-                    comboCount++;
-                }
+                comboCount += linesCount;
                 linesCleared += linesCount;
                 const newLevel = Math.floor(linesCleared / config.LINES_PER_LEVEL) + 1;
                 let levelUpOccurred = false;
