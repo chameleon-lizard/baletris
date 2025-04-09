@@ -216,12 +216,13 @@
         let gameLoopInterval, isGameOver, isPaused;
         let moveLeftHeld, moveRightHeld, moveDownHeld; let dasTimeoutLeft, dasTimeoutRight, dasTimeoutDown; let arrIntervalLeft, arrIntervalRight, arrIntervalDown;
         let isShaking = false; let isFlashing = false; let lockDelayTimeout = null; let isPieceGrounded = false;
-        let isShopOpen = false; let currentShopItems = [];
+        let isShopOpen = false;
         let temporaryModifier = NO_MODIFIER; let temporaryModifierInterval = null;
         let lastTemporaryModifierId = NO_MODIFIER.id;
         let isFirstModifierCycle = true;
         let nextModifierTimestamp = null; let uiTimerInterval = null; let pauseStartTime = null;
-        let purchasedThisVisit = false;
+        let shopItemsForCurrentModifier = []; // Holds the 2 items for the current cycle
+        let purchasedThisModifierCycle = false; // Tracks purchase within the current cycle
 
         // --- Modifier State (Permanent & Temporary Flags/Values) ---
         let modifiers = {};
@@ -281,7 +282,7 @@
                 // Position the overlay: start after the left margin AND after the board's left border
                 const overlayLeftPosition = leftOffset + BOARD_BORDER_WIDTH;
 
-                console.log(`DEBUG: Updating restricted zone UI. Total Rows: ${totalRows}, Height: ${height}px, Width: ${overlayWidth}px, Left: ${overlayLeftPosition}px`);
+                // console.log(`DEBUG: Updating restricted zone UI. Total Rows: ${totalRows}, Height: ${height}px, Width: ${overlayWidth}px, Left: ${overlayLeftPosition}px`);
 
                 restrictedZoneOverlay.style.height = `${height}px`;
                 restrictedZoneOverlay.style.width = `${overlayWidth}px`; // Set the width dynamically
@@ -334,7 +335,7 @@
             if (!isGameOver) {
                 baseGameSpeed = Math.max(config.MIN_GAME_SPEED, Math.floor(baseGameSpeed / config.RISING_SPEED_FACTOR));
                 updateGameSpeed();
-                console.log(`Piece locked. New base speed interval: ${baseGameSpeed}, Effective: ${effectiveGameSpeed}`);
+                // console.log(`Piece locked. New base speed interval: ${baseGameSpeed}, Effective: ${effectiveGameSpeed}`);
 
                 const lC = clearLines(); // Clear lines first
 
@@ -397,7 +398,7 @@
             clearLockDelay();
             currentPiece = createPiece(nextPiece.type);
             nextPiece = createPiece(getRandomPieceType());
-            console.log("Spawn Cycle: Was Next:", currentPiece.type, "| Just Spawned:", currentPiece.type, "| New Next:", nextPiece.type);
+            // console.log("Spawn Cycle: Was Next:", currentPiece.type, "| Just Spawned:", currentPiece.type, "| New Next:", nextPiece.type);
             updateNextPiecePreview();
 
             // Standard spawn check
@@ -456,7 +457,7 @@
             if (!isGameOver && !isPaused) {
                 gameLoopInterval = setInterval(gameLoop, effectiveGameSpeed);
             }
-            console.log(`Updating speed. Base: ${baseGameSpeed}, PermMod: ${modifiers.speedMultiplier}, TempMod: ${modifiers.tempSpeedMultiplier}, Effective: ${effectiveGameSpeed}`);
+            // console.log(`Updating speed. Base: ${baseGameSpeed}, PermMod: ${modifiers.speedMultiplier}, TempMod: ${modifiers.tempSpeedMultiplier}, Effective: ${effectiveGameSpeed}`);
             if(speedDisplayElement) { speedDisplayElement.textContent = effectiveGameSpeed; }
         }
 
@@ -470,6 +471,9 @@
         // --- Temporary Modifier Logic ---
         function cycleTemporaryModifier() {
             if (isPaused || isGameOver) return;
+
+            // Reset purchase flag for the new cycle
+            purchasedThisModifierCycle = false;
 
             if (isFirstModifierCycle) {
                 temporaryModifier = NO_MODIFIER;
@@ -507,6 +511,9 @@
                 lastTemporaryModifierId = temporaryModifier.id;
             }
 
+            // Generate the shop items for this new cycle
+            generateShopItemsForCycle(temporaryModifier.id);
+
             temporaryModifierDisplay.textContent = `Modifier: ${temporaryModifier.name}`;
             gameBoardElement.style.backgroundColor = temporaryModifier.backgroundColor || DEFAULT_BOARD_COLOR;
             updateRestrictedZoneUI();
@@ -530,13 +537,77 @@
         }
 
         // --- Shop Logic ---
-        function openShop() { /* Reverted to standard random shop logic */ if (isGameOver || isShopOpen || isPaused) return; console.log("Opening Shop..."); pauseGame(false); isShopOpen = true; currentShopItems = []; purchasedThisVisit = false; /* Reset purchase limit flag */ let activeTempItem = null; if (temporaryModifier && temporaryModifier.id !== NO_MODIFIER.id) { activeTempItem = ITEM_POOL.find(item => item.id === temporaryModifier.id); if (activeTempItem) { currentShopItems.push(activeTempItem); } } const availableItems = ITEM_POOL.filter(item => { if (item.id === temporaryModifier?.id) return false; if (item.id === 'no_restrictions' && getTotalRestrictedRows() <= 0) return false; return true; }); while (currentShopItems.length < 2 && availableItems.length > 0) { const randomIndex = Math.floor(Math.random() * availableItems.length); const newItem = availableItems.splice(randomIndex, 1)[0]; if (!currentShopItems.some(existing => existing.id === newItem.id)) { currentShopItems.push(newItem); } } if (currentShopItems.length < 2 && ITEM_POOL.length > currentShopItems.length) { const fallbackItems = ITEM_POOL.filter(item => !currentShopItems.some(existing => existing.id === item.id) && !(item.id === 'no_restrictions' && getTotalRestrictedRows() <= 0) ); if (fallbackItems.length > 0) { currentShopItems.push(fallbackItems[Math.floor(Math.random() * fallbackItems.length)]); } } currentShopItems = currentShopItems.slice(0, 2); populateShopUI(); shopModalElement.style.display = 'flex'; }
-        function closeShop() { if (!isShopOpen) return; console.log("Closing Shop..."); isShopOpen = false; shopModalElement.style.display = 'none'; resumeGame(); }
+
+        // New function to generate shop items for the current modifier cycle
+        function generateShopItemsForCycle(activeTempModifierId) {
+            shopItemsForCurrentModifier = []; // Clear previous items
+
+            let activeTempItem = null;
+            if (activeTempModifierId !== NO_MODIFIER.id) {
+                activeTempItem = ITEM_POOL.find(item => item.id === activeTempModifierId);
+                if (activeTempItem) {
+                    shopItemsForCurrentModifier.push(activeTempItem); // Add active item first
+                }
+            }
+
+            // Filter available items: exclude active temp item and items with unmet conditions
+            const availableItems = ITEM_POOL.filter(item => {
+                if (item.id === activeTempModifierId) return false; // Exclude active temp item
+                if (item.id === 'no_restrictions' && getTotalRestrictedRows() <= 0) return false; // Exclude No Restrictions if no rows are restricted
+                return true;
+            });
+
+            // Add random items until we have 2 (or run out of available items)
+            while (shopItemsForCurrentModifier.length < 2 && availableItems.length > 0) {
+                const randomIndex = Math.floor(Math.random() * availableItems.length);
+                const newItem = availableItems.splice(randomIndex, 1)[0];
+                // Ensure no duplicates (shouldn't happen with current logic, but good practice)
+                if (!shopItemsForCurrentModifier.some(existing => existing.id === newItem.id)) {
+                    shopItemsForCurrentModifier.push(newItem);
+                }
+            }
+
+            // If still less than 2 and the pool has more items (e.g., active item was the only one filtered initially)
+            if (shopItemsForCurrentModifier.length < 2 && ITEM_POOL.length > shopItemsForCurrentModifier.length) {
+                 const fallbackItems = ITEM_POOL.filter(item =>
+                     !shopItemsForCurrentModifier.some(existing => existing.id === item.id) &&
+                     !(item.id === 'no_restrictions' && getTotalRestrictedRows() <= 0)
+                 );
+                 if (fallbackItems.length > 0) {
+                     shopItemsForCurrentModifier.push(fallbackItems[Math.floor(Math.random() * fallbackItems.length)]);
+                 }
+            }
+
+            console.log("Generated shop items for cycle:", shopItemsForCurrentModifier.map(i => i.name));
+        }
+
+
+        function openShop() {
+            if (isGameOver || isShopOpen || isPaused) return;
+            console.log("Opening Shop...");
+            pauseGame(false); // Pause without showing the 'Paused' message
+            isShopOpen = true;
+            // Items are already generated by generateShopItemsForCycle
+            populateShopUI(); // Populate UI with the current cycle's items
+            shopModalElement.style.display = 'flex';
+        }
+
+        function closeShop() {
+            if (!isShopOpen) return;
+            console.log("Closing Shop...");
+            isShopOpen = false;
+            shopModalElement.style.display = 'none';
+            resumeGame();
+        }
+
         function populateShopUI() {
             shopItemsContainerElement.innerHTML = '';
-            if (currentShopItems.length === 0) { shopItemsContainerElement.innerHTML = '<p>No items available!</p>'; return; }
+            if (shopItemsForCurrentModifier.length === 0) {
+                shopItemsContainerElement.innerHTML = '<p>No items available!</p>';
+                return;
+            }
 
-            currentShopItems.forEach((item, index) => {
+            shopItemsForCurrentModifier.forEach((item, index) => {
                 const itemCard = document.createElement('div');
                 itemCard.className = 'shop-item-card';
 
@@ -544,7 +615,7 @@
                 // Include No Restrictions cost increase multiplier
                 const displayCost = Math.floor(currentBaseCost * modifiers.shopCostMultiplier * modifiers.shopCostIncreaseMultiplier * modifiers.tempShopCostIncreaseMultiplier);
 
-
+                // Check if this item is the currently active temporary modifier (and is the first item displayed)
                 const isActiveTemporary = temporaryModifier && item.id !== NO_MODIFIER.id && item.id === temporaryModifier.id && index === 0;
                 if (isActiveTemporary) {
                     itemCard.classList.add('shop-item-active');
@@ -557,9 +628,10 @@
                 const nameEl = document.createElement('div'); nameEl.className = 'shop-item-name'; nameEl.textContent = item.name;
                 const descEl = document.createElement('div'); descEl.className = 'shop-item-desc'; descEl.textContent = item.description;
                 const costEl = document.createElement('div'); costEl.className = 'shop-item-cost'; costEl.textContent = `Cost: ${displayCost}`;
-                const buyButton = document.createElement('button'); buyButton.className = 'shop-buy-button'; buyButton.textContent = 'Buy'; buyButton.dataset.itemId = item.id; buyButton.dataset.itemIndex = index;
-                // Disable button if cannot afford OR if an item was already bought this visit
-                buyButton.disabled = score < displayCost || purchasedThisVisit;
+                const buyButton = document.createElement('button'); buyButton.className = 'shop-buy-button'; buyButton.textContent = 'Buy'; buyButton.dataset.itemId = item.id; buyButton.dataset.itemIndex = index; // Keep index for potential future use
+
+                // Disable button if cannot afford OR if an item was already bought THIS MODIFIER CYCLE
+                buyButton.disabled = score < displayCost || purchasedThisModifierCycle;
                 buyButton.onclick = () => buyItem(item.id, displayCost);
 
                 itemCard.appendChild(nameEl); itemCard.appendChild(descEl); itemCard.appendChild(costEl); itemCard.appendChild(buyButton);
@@ -568,16 +640,16 @@
         }
 
         function buyItem(itemId, purchaseCost) {
-            // Check if already purchased this visit
-            if (purchasedThisVisit) {
-                console.log("Already purchased an item this visit.");
-                showMessage("You can only buy one item per shop visit.", "OK");
+            // Check if already purchased this modifier cycle
+            if (purchasedThisModifierCycle) {
+                console.log("Already purchased an item this modifier cycle.");
+                showMessage("You can only buy one item per modifier cycle.", "OK");
                 return;
             }
 
-            const itemIndex = currentShopItems.findIndex(item => item.id === itemId);
-            if (itemIndex === -1) return;
-            const item = currentShopItems[itemIndex];
+            const itemIndex = shopItemsForCurrentModifier.findIndex(item => item.id === itemId);
+            if (itemIndex === -1) return; // Should not happen
+            const item = shopItemsForCurrentModifier[itemIndex];
 
             // Removed pre-purchase check for Glass Cannon
 
@@ -586,18 +658,9 @@
                 score -= purchaseCost;
                 item.applyEffect(); // Apply permanent effect
                 modifiers.purchasedItemCount++;
-                purchasedThisVisit = true; // Set flag for this visit
+                purchasedThisModifierCycle = true; // Set flag for this cycle
                 updateInfoPanel();
-
-                // Disable ALL buy buttons after purchase
-                const buyButtons = shopItemsContainerElement.querySelectorAll('.shop-buy-button');
-                buyButtons.forEach(button => {
-                    button.disabled = true;
-                    // Optionally change text on the bought button
-                    if (button.dataset.itemId === itemId) {
-                         button.textContent = 'Bought';
-                    }
-                });
+                populateShopUI(); // Re-populate to disable buttons immediately
 
             } else {
                 console.log(`Cannot afford item: ${item.name} (Cost: ${purchaseCost})`);
@@ -642,12 +705,18 @@
             temporaryModifier = NO_MODIFIER; // Start with None
             lastTemporaryModifierId = NO_MODIFIER.id; // Reset last modifier tracking
             isFirstModifierCycle = true; // Ensure first cycle is handled correctly
+            purchasedThisModifierCycle = false; // Reset purchase flag
+            shopItemsForCurrentModifier = []; // Clear shop items
+
             clearInterval(temporaryModifierInterval);
             clearInterval(uiTimerInterval);
             temporaryModifierDisplay.textContent = 'Modifier: None';
             modifierTimerDisplay.textContent = '';
             gameBoardElement.style.backgroundColor = DEFAULT_BOARD_COLOR;
             updateRestrictedZoneUI(); // Reset overlay
+
+            // Generate initial shop items for the first "None" cycle
+            generateShopItemsForCycle(NO_MODIFIER.id);
 
             clearHorizontalMovement(true); clearHorizontalMovement(false); clearVerticalMovement(); clearLockDelay();
             shopModalElement.style.display = 'none'; messageBox.style.display = 'none';
