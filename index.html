@@ -146,7 +146,7 @@
             </div>
             <div class="info-panel", id='info-panel'>
                  <div class="info-item"> <span class="info-label">Score</span> <span id="score" class="info-value">0</span> </div>
-                 <div class="info-item"> <span class="info-label">Lines</span> <span id="lines" class="info-value">0</span> </div>
+                 <div class="info-item"> <span class="info-label">Combo</span> <span id="combo-multiplier" class="info-value">1.00x</span> </div>
                  <div class="info-item"> <span class="info-label">Speed (ms)</span> <span id="speed-display" class="info-value">0</span> </div>
                  <div class="info-item"> <span class="info-label">Next</span> <div id="next-piece-preview" class="mx-auto" style="width: 80px; height: 80px; display: grid; grid-template-columns: repeat(4, 20px); grid-template-rows: repeat(4, 20px);"></div> </div>
                  <div class="info-item" id="hold-item-container"> <span class="info-label">Hold</span> <div id="hold-piece-preview" class="mx-auto" style="width: 80px; height: 80px; display: grid; grid-template-columns: repeat(4, 20px); grid-template-rows: repeat(4, 20px);"></div> </div>
@@ -393,8 +393,9 @@
                 const lC = clearLines(); // Clear lines first
                 
                 // Reset combo if piece locked without clearing lines
-                if (linesCleared === linesBefore) {
+                if (lC === 0) {  // Use actual lines cleared count from this lock
                     comboCount = 0;
+                    updateInfoPanel();  // Force UI update when combo resets
                 }
 
                  // --- New Glass Cannon Game Over Check (Post-Lock, Post-Clear) ---
@@ -527,7 +528,11 @@
 
         function updateInfoPanel() {
             scoreElement.textContent = score;
-            linesElement.textContent = linesCleared;
+            // Include permanent and temporary score modifiers in combo display
+            const totalMultiplier = (1 + (comboCount * 0.05)) * 
+                                  (1 + modifiers.lineScoreMultiplierBonus + modifiers.tempLineScoreMultiplierBonus) *
+                                  modifiers.glassCannonScoreMultiplier * modifiers.tempGlassCannonScoreMultiplier;
+            document.getElementById('combo-multiplier').textContent = totalMultiplier.toFixed(2) + 'x';
             speedDisplayElement.textContent = effectiveGameSpeed;
         }
 
@@ -804,6 +809,7 @@
         function startGame() {
             console.log("Starting Game...");
             board = createEmptyBoard(); score = 0; linesCleared = 0; level = 1; comboCount = 0;
+            updateInfoPanel();  // Use the full calculation instead of hardcoded value
             baseGameSpeed = config.STARTING_SPEED;
             isGameOver = false; isPaused = false; isShopOpen = false;
             canHold = true; heldPiece = null;
