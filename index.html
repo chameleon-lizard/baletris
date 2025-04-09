@@ -260,15 +260,15 @@
 
         // --- Item Pool Definition ---
         const ITEM_POOL = [
-            // Stackable: Adrenaline (Score Bonus additive, Speed Multiplicative)
-            { id: 'adrenaline', name: 'Adrenaline', cost: config.SHOP_ITEM_COST, description: '+50% score. Speed +20%.', backgroundColor: '#2f1a2e',
-              applyEffect: () => { modifiers.lineScoreMultiplierBonus += 0.5; modifiers.speedMultiplier *= 0.8; },
-              applyTemporaryEffect: () => { modifiers.tempLineScoreMultiplierBonus = 0.5; modifiers.tempSpeedMultiplier = 0.8; return true; },
+            // Stackable: Adrenaline (Score Bonus additive, Speed Multiplicative) - REBALANCED
+            { id: 'adrenaline', name: 'Adrenaline', cost: config.SHOP_ITEM_COST, description: '+25% score. Speed +25%.', backgroundColor: '#2f1a2e',
+              applyEffect: () => { modifiers.lineScoreMultiplierBonus += 0.25; modifiers.speedMultiplier *= 0.75; },
+              applyTemporaryEffect: () => { modifiers.tempLineScoreMultiplierBonus = 0.25; modifiers.tempSpeedMultiplier = 0.75; return true; },
               removeTemporaryEffect: () => { modifiers.tempLineScoreMultiplierBonus = 0.0; modifiers.tempSpeedMultiplier = 1.0; } },
-            // Stackable: Tetris Specialist (Multiplicative for Tetris/Other scores)
-            { id: 'tetris_specialist', name: 'Tetris Specialist', cost: config.SHOP_ITEM_COST, description: 'Tetris score x3. Others /2.', backgroundColor: '#1a2e2e',
-              applyEffect: () => { modifiers.tetrisSpecialistMultiplier *= 3; modifiers.otherLineSpecialistMultiplier *= 0.5; },
-              applyTemporaryEffect: () => { modifiers.tempTetrisSpecialistMultiplier = 3; modifiers.tempOtherLineSpecialistMultiplier = 0.5; return true; },
+            // Stackable: Tetris Specialist (Multiplicative for Tetris/Other scores) - REBALANCED
+            { id: 'tetris_specialist', name: 'Tetris Specialist', cost: config.SHOP_ITEM_COST, description: 'Tetris score +75%. Others -50%.', backgroundColor: '#1a2e2e',
+              applyEffect: () => { modifiers.tetrisSpecialistMultiplier *= 1.75; modifiers.otherLineSpecialistMultiplier *= 0.5; },
+              applyTemporaryEffect: () => { modifiers.tempTetrisSpecialistMultiplier = 1.75; modifiers.tempOtherLineSpecialistMultiplier = 0.5; return true; },
               removeTemporaryEffect: () => { modifiers.tempTetrisSpecialistMultiplier = 1.0; modifiers.tempOtherLineSpecialistMultiplier = 1.0; } },
             // Stackable: Economy (Multiplicative)
             { id: 'economy', name: 'Economy', cost: config.SHOP_ITEM_COST, description: 'Shop costs -30%. (Garbage+ NYI)', backgroundColor: '#1a2a1a',
@@ -290,8 +290,8 @@
               applyEffect: () => { modifiers.pieceWeights = { T: 0.5, O: 0.5, L: 0.5, J: 0.5, I: 2, S: 2, Z: 2 }; },
               applyTemporaryEffect: () => { modifiers.tempPieceWeights = { T: 0.5, O: 0.5, L: 0.5, J: 0.5, I: 2, S: 2, Z: 2 }; return true; },
               removeTemporaryEffect: () => { modifiers.tempPieceWeights = null; } },
-            // Stackable: Glass Cannon (Rows Additive, Score Multiplicative)
-            { id: 'glass_cannon', name: 'Glass Cannon', cost: config.SHOP_ITEM_COST, description: 'Score x2. Top 4 rows blocked per purchase.', backgroundColor: '#2f1f1f',
+            // Stackable: Glass Cannon (Rows Additive, Score Multiplicative) - DESCRIPTION CHANGED
+            { id: 'glass_cannon', name: 'Glass Cannon', cost: config.SHOP_ITEM_COST, description: 'Score +100%. Top 4 rows blocked per purchase.', backgroundColor: '#2f1f1f',
               applyEffect: () => { modifiers.restrictedTopRows += config.GLASS_CANNON_ROW_PENALTY; modifiers.glassCannonScoreMultiplier *= 2; updateRestrictedZoneUI(); },
               applyTemporaryEffect: () => { modifiers.tempRestrictedTopRows = config.GLASS_CANNON_ROW_PENALTY; modifiers.tempGlassCannonScoreMultiplier = 2.0; updateRestrictedZoneUI(); return true; },
               removeTemporaryEffect: () => { modifiers.tempRestrictedTopRows = 0; modifiers.tempGlassCannonScoreMultiplier = 1.0; updateRestrictedZoneUI(); } },
