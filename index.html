@@ -65,6 +65,7 @@
             /* Grid templates set by JS */
             background-color: #0f172a; /* Default color set here */
             flex-shrink: 0;
+            position: relative; /* Needed for the ::after pseudo-element positioning */
         }
         /* Restricted Zone Overlay */
         #restricted-zone-overlay {
@@ -104,7 +105,21 @@
         .shop-close-button:hover { background-color: #dc2626; }
         /* Visual Effects */
         @keyframes shake { 0%, 100% { transform: translateX(0); } 10%, 30%, 50%, 70%, 90% { transform: translateX(-3px); } 20%, 40%, 60%, 80% { transform: translateX(3px); } } .screen-shake { animation: shake 0.2s cubic-bezier(.36,.07,.19,.97) both; }
-        #game-board::after { content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-color: white; opacity: 0; pointer-events: none; z-index: 5; }
+        /* Flash Effect Pseudo-Element */
+        #game-board::after {
+            content: '';
+            position: absolute;
+            /* Cover the entire element including borders */
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: white; /* Base color for flash */
+            opacity: 0; /* Start transparent */
+            pointer-events: none; /* Don't interfere with clicks */
+            z-index: 5; /* Above cells, below overlay? */
+            /* border-radius removed, will use parent's radius */
+        }
         @keyframes flash-1 { 0% { opacity: 0; } 50% { opacity: 0.3; } 100% { opacity: 0; } } @keyframes flash-2 { 0% { opacity: 0; } 50% { opacity: 0.45; } 100% { opacity: 0; } } @keyframes flash-3 { 0% { opacity: 0; } 50% { opacity: 0.6; } 100% { opacity: 0; } } @keyframes flash-tetris { 0% { opacity: 0; background-color: #fff; } 25% { opacity: 0.8; background-color: #ff0; } 50% { opacity: 0.8; background-color: #0ff; } 75% { opacity: 0.8; background-color: #f0f; } 100% { opacity: 0; background-color: #fff; } }
         .flash-1::after { animation: flash-1 0.15s ease-out; } .flash-2::after { animation: flash-2 0.2s ease-out; } .flash-3::after { animation: flash-3 0.25s ease-out; } .flash-tetris::after { animation: flash-tetris 0.4s ease-out; }
 
