@@ -244,6 +244,7 @@
                 restrictedTopRows: 0,               // Additive stacking
                 glassCannonScoreMultiplier: 1.0,    // Multiplicative stacking
                 shopCostIncreaseMultiplier: 1.0,    // Multiplicative stacking ('No Restrictions')
+                economyGarbageBonus: 0,             // Additive stacking for extra garbage lines
 
                 // Temporary Modifiers (Generally replace previous temp effect)
                 tempSpeedMultiplier: 1.0,
@@ -263,7 +264,7 @@
         // --- Item Pool Definition ---
         const ITEM_POOL = [
             // Stackable: Adrenaline (Score Bonus additive, Speed Multiplicative) - REBALANCED
-            { id: 'adrenaline', name: 'Adrenaline', cost: config.SHOP_ITEM_COST, description: 'Score 1.25x. Speed 0.75x.', backgroundColor: '#2f1a2e',
+            { id: 'adrenaline', name: 'Adrenaline', cost: config.SHOP_ITEM_COST, description: 'Score 1.25x. Speed 1.25x.', backgroundColor: '#2f1a2e',
               applyEffect: () => { modifiers.lineScoreMultiplierBonus += 0.25; modifiers.speedMultiplier *= 0.75; },
               applyTemporaryEffect: () => { modifiers.tempLineScoreMultiplierBonus = 0.25; modifiers.tempSpeedMultiplier = 0.75; return true; },
               removeTemporaryEffect: () => { modifiers.tempLineScoreMultiplierBonus = 0.0; modifiers.tempSpeedMultiplier = 1.0; } },
@@ -277,10 +278,10 @@
               applyEffect: () => { modifiers.tetrisSpecialistMultiplier *= 1.75; modifiers.otherLineSpecialistMultiplier *= 0.5; },
               applyTemporaryEffect: () => { modifiers.tempTetrisSpecialistMultiplier = 1.75; modifiers.tempOtherLineSpecialistMultiplier = 0.5; return true; },
               removeTemporaryEffect: () => { modifiers.tempTetrisSpecialistMultiplier = 1.0; modifiers.tempOtherLineSpecialistMultiplier = 1.0; } },
-            // Stackable: Economy (Multiplicative)
-            { id: 'economy', name: 'Economy', cost: config.SHOP_ITEM_COST, description: 'Shop costs -30%. (Garbage+ NYI)', backgroundColor: '#1a2a1a',
-              applyEffect: () => { modifiers.shopCostMultiplier *= 0.7; },
-              applyTemporaryEffect: () => { return true; }, // No direct temporary effect, cost calculated at purchase
+            // Stackable: Economy (Multiplicative Cost, Additive Garbage)
+            { id: 'economy', name: 'Economy', cost: config.SHOP_ITEM_COST, description: 'Shop costs -30%. +1 garbage line per cycle.', backgroundColor: '#1a2a1a',
+              applyEffect: () => { modifiers.shopCostMultiplier *= 0.7; modifiers.economyGarbageBonus += 1; },
+              applyTemporaryEffect: () => { return true; }, // No direct temporary effect, cost calculated at purchase, garbage is permanent
               removeTemporaryEffect: () => {} },
             // Not Stackable (Boolean Flag): Gambler
             { id: 'gambler', name: 'Gambler', cost: config.SHOP_ITEM_COST, description: '50% chance: double score, 50% chance: zero score.', backgroundColor: '#2a2a1a',
@@ -565,7 +566,7 @@
             // Calculate the current combo multiplier value
             const comboMultiplierValue = 1 + (comboCount * 0.05);
             // Calculate total multiplier including all bonuses
-            const totalMultiplier = comboMultiplierValue * 
+            const totalMultiplier = comboMultiplierValue *
                                   (1 + modifiers.lineScoreMultiplierBonus + modifiers.tempLineScoreMultiplierBonus) *
                                   modifiers.glassCannonScoreMultiplier * modifiers.tempGlassCannonScoreMultiplier;
 
@@ -675,7 +676,13 @@
             updateRestrictedZoneUI(); // Update UI based on combined permanent + new temporary state
             updateInfoPanel(); // Update combo display if Kinetic Conversion reset it
 
-            if (!isFirstModifierCycle && config.ALLOW_GARBAGE) { addGarbageLines(1); }
+            // Add garbage lines: base 1 + bonus from Economy items
+            if (!isFirstModifierCycle && config.ALLOW_GARBAGE) {
+                const garbageToAdd = 1 + modifiers.economyGarbageBonus;
+                if (garbageToAdd > 0) {
+                    addGarbageLines(garbageToAdd);
+                }
+            }
 
             nextModifierTimestamp = Date.now() + config.TEMPORARY_MODIFIER_INTERVAL;
             updateGameSpeed(); // Update speed based on combined permanent + new temporary state
