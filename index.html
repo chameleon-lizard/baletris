@@ -223,6 +223,7 @@
         let nextModifierTimestamp = null; let uiTimerInterval = null; let pauseStartTime = null;
         let shopItemsForCurrentModifier = []; // Holds the 2 items for the current cycle
         let purchasedThisModifierCycle = false; // Tracks purchase within the current cycle
+        let comboCount = 0; // Track consecutive line clears
 
         // --- Modifier State (Permanent & Temporary Flags/Values) ---
         let modifiers = {};
