@@ -263,10 +263,15 @@
         // --- Item Pool Definition ---
         const ITEM_POOL = [
             // Stackable: Adrenaline (Score Bonus additive, Speed Multiplicative) - REBALANCED
-            { id: 'adrenaline', name: 'Adrenaline', cost: config.SHOP_ITEM_COST, description: '+25% score. Speed +25%.', backgroundColor: '#2f1a2e',
+            { id: 'adrenaline', name: 'Adrenaline', cost: config.SHOP_ITEM_COST, description: 'Score 1.25x. Speed 0.75x.', backgroundColor: '#2f1a2e',
               applyEffect: () => { modifiers.lineScoreMultiplierBonus += 0.25; modifiers.speedMultiplier *= 0.75; },
               applyTemporaryEffect: () => { modifiers.tempLineScoreMultiplierBonus = 0.25; modifiers.tempSpeedMultiplier = 0.75; return true; },
               removeTemporaryEffect: () => { modifiers.tempLineScoreMultiplierBonus = 0.0; modifiers.tempSpeedMultiplier = 1.0; } },
+            // Stackable: Slowdown (Score and Speed multiplicative)
+            { id: 'slowdown', name: 'Slowdown', cost: config.SHOP_ITEM_COST, description: 'Score 0.5x. Speed 0.5x.', backgroundColor: '#1a2e2e',
+              applyEffect: () => { modifiers.lineScoreMultiplierBonus *= 0.5; modifiers.speedMultiplier *= 0.5; },
+              applyTemporaryEffect: () => { modifiers.tempLineScoreMultiplierBonus = 0.5; modifiers.tempSpeedMultiplier = 0.5; return true; },
+              removeTemporaryEffect: () => { modifiers.tempLineScoreMultiplierBonus = 1.0; modifiers.tempSpeedMultiplier = 1.0; } },
             // Stackable: Tetris Specialist (Multiplicative for Tetris/Other scores) - REBALANCED
             { id: 'tetris_specialist', name: 'Tetris Specialist', cost: config.SHOP_ITEM_COST, description: 'Tetris score +75%. Others -50%.', backgroundColor: '#1a2e2e',
               applyEffect: () => { modifiers.tetrisSpecialistMultiplier *= 1.75; modifiers.otherLineSpecialistMultiplier *= 0.5; },
@@ -529,7 +534,8 @@
             // Include permanent and temporary score modifiers in combo display
             const totalMultiplier = (1 + (comboCount * 0.05)) * 
                                   (1 + modifiers.lineScoreMultiplierBonus + modifiers.tempLineScoreMultiplierBonus) *
-                                  modifiers.glassCannonScoreMultiplier * modifiers.tempGlassCannonScoreMultiplier;
+                                  modifiers.glassCannonScoreMultiplier * modifiers.tempGlassCannonScoreMultiplier *
+                                  modifiers.speedMultiplier * modifiers.tempSpeedMultiplier;
             document.getElementById('combo-multiplier').textContent = totalMultiplier.toFixed(2) + 'x';
             speedDisplayElement.textContent = effectiveGameSpeed;
         }
