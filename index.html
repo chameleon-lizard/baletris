@@ -564,14 +564,13 @@
             scoreElement.textContent = score;
             // Calculate the current combo multiplier value
             const comboMultiplierValue = 1 + (comboCount * 0.05);
-            // Include permanent and temporary score modifiers in combo display
-            const totalMultiplier = comboMultiplierValue * // Start with combo multiplier
-                                  (1 + modifiers.lineScoreMultiplierBonus + modifiers.tempLineScoreMultiplierBonus) * // Add base bonuses
-                                  modifiers.glassCannonScoreMultiplier * modifiers.tempGlassCannonScoreMultiplier * // Apply glass cannon
-                                  modifiers.speedMultiplier * modifiers.tempSpeedMultiplier; // Apply speed (inversely related to score usually, but shown here for effect)
+            // Calculate total multiplier including all bonuses
+            const totalMultiplier = comboMultiplierValue * 
+                                  (1 + modifiers.lineScoreMultiplierBonus + modifiers.tempLineScoreMultiplierBonus) *
+                                  modifiers.glassCannonScoreMultiplier * modifiers.tempGlassCannonScoreMultiplier;
 
-            // Display the combo multiplier itself (1 + combo * 0.05)
-            document.getElementById('combo-multiplier').textContent = comboMultiplierValue.toFixed(2) + 'x';
+            // Display the total multiplier including all active bonuses
+            document.getElementById('combo-multiplier').textContent = totalMultiplier.toFixed(2) + 'x';
             speedDisplayElement.textContent = effectiveGameSpeed;
         }
 
