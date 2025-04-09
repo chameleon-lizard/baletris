@@ -269,9 +269,9 @@
               removeTemporaryEffect: () => { modifiers.tempLineScoreMultiplierBonus = 0.0; modifiers.tempSpeedMultiplier = 1.0; } },
             // Stackable: Slowdown (Score and Speed multiplicative)
             { id: 'slowdown', name: 'Slowdown', cost: config.SHOP_ITEM_COST, description: 'Score 0.5x. Speed 0.5x.', backgroundColor: '#1a2e2e',
-              applyEffect: () => { modifiers.lineScoreMultiplierBonus *= 0.5; modifiers.speedMultiplier *= 0.5; },
-              applyTemporaryEffect: () => { modifiers.tempLineScoreMultiplierBonus = 0.5; modifiers.tempSpeedMultiplier = 0.5; return true; },
-              removeTemporaryEffect: () => { modifiers.tempLineScoreMultiplierBonus = 1.0; modifiers.tempSpeedMultiplier = 1.0; } },
+              applyEffect: () => { modifiers.lineScoreMultiplierBonus *= 0.5; modifiers.speedMultiplier /= 0.5; },
+              applyTemporaryEffect: () => { modifiers.tempLineScoreMultiplierBonus *= 0.5; modifiers.tempSpeedMultiplier /= 0.5; return true; },
+              removeTemporaryEffect: () => { modifiers.tempLineScoreMultiplierBonus /= 0.5; modifiers.tempSpeedMultiplier *= 0.5; } },
             // Stackable: Tetris Specialist (Multiplicative for Tetris/Other scores) - REBALANCED
             { id: 'tetris_specialist', name: 'Tetris Specialist', cost: config.SHOP_ITEM_COST, description: 'Tetris score +75%. Others -50%.', backgroundColor: '#1a2e2e',
               applyEffect: () => { modifiers.tetrisSpecialistMultiplier *= 1.75; modifiers.otherLineSpecialistMultiplier *= 0.5; },
@@ -307,6 +307,37 @@
               applyEffect: () => { modifiers.restrictedTopRows = Math.max(0, modifiers.restrictedTopRows - 1); modifiers.speedMultiplier *= (1 / 1.3); modifiers.shopCostIncreaseMultiplier *= 1.4; updateRestrictedZoneUI(); },
               applyTemporaryEffect: () => { if (getTotalRestrictedRows() <= 0) return false; modifiers.tempRestrictedTopRows = -1; modifiers.tempSpeedMultiplier *= (1 / 1.3); modifiers.tempShopCostIncreaseMultiplier = 1.4; updateRestrictedZoneUI(); return true; },
               removeTemporaryEffect: () => { modifiers.tempRestrictedTopRows = 0; modifiers.tempSpeedMultiplier /= (1 / 1.3); modifiers.tempShopCostIncreaseMultiplier = 1.0; updateRestrictedZoneUI(); } },
+            // Stackable: Kinetic Conversion (Converts combo to base score/speed, resets combo)
+            { id: 'kinetic_conversion', name: 'Kinetic Conversion', cost: config.SHOP_ITEM_COST, description: 'Adds combo to multiplier, increases speed.', backgroundColor: '#2a1a2f',
+              applyEffect: () => {
+                  if (comboCount > 0) {
+                      const comboBonus = comboCount * 0.05;
+                      const speedFactor = Math.pow(0.95, comboCount);
+                      modifiers.lineScoreMultiplierBonus += comboBonus;
+                      modifiers.speedMultiplier *= speedFactor;
+                      console.log(`Kinetic Conversion: Added ${comboBonus.toFixed(2)} to score bonus, speed multiplier now ${modifiers.speedMultiplier.toFixed(3)}`);
+                      comboCount = 0; // Reset combo
+                  }
+              },
+              applyTemporaryEffect: () => {
+                  if (comboCount > 0) {
+                      const comboBonus = comboCount * 0.05;
+                      const speedFactor = Math.pow(0.95, comboCount);
+                      modifiers.tempLineScoreMultiplierBonus = comboBonus; // Set temporary bonus
+                      modifiers.tempSpeedMultiplier = speedFactor; // Set temporary speed factor
+                      console.log(`Temp Kinetic Conversion: Added ${comboBonus.toFixed(2)} temp score bonus, speed mult ${speedFactor.toFixed(3)}`);
+                      comboCount = 0; // Reset combo
+                      return true; // Effect applied
+                  }
+                  return false; // Cannot apply if combo is 0
+              },
+              removeTemporaryEffect: () => {
+                  // Reset the temporary effects applied by this item
+                  modifiers.tempLineScoreMultiplierBonus = 0.0;
+                  modifiers.tempSpeedMultiplier = 1.0;
+                  // DO NOT restore combo count here
+              }
+            },
         ];
 
         // --- Tetromino Definitions ---
@@ -379,7 +410,7 @@
 
         function lockPiece() {
             if (!currentPiece) return;
-            
+
             // Reset combo if no lines were cleared
             const linesBefore = linesCleared;
             // Removed initial restriction check
@@ -396,7 +427,7 @@
                 // console.log(`Piece locked. New base speed interval: ${baseGameSpeed}, Effective: ${effectiveGameSpeed}`);
 
                 const lC = clearLines(); // Clear lines first
-                
+
                 // Reset combo if piece locked without clearing lines
                 if (lC === 0) {  // Use actual lines cleared count from this lock
                     comboCount = 0;
@@ -465,7 +496,7 @@
                 const comboMultiplier = 1 + (comboCount * 0.05);
                 let finalScore = basePoints * currentScoreMultiplier * level * gamblerMultiplier * glassCannonMult * comboMultiplier;
                 score += Math.floor(finalScore);
-                comboCount += linesCount;
+                comboCount += linesCount; // Increase combo AFTER calculating score for this clear
                 linesCleared += linesCount;
                 const newLevel = Math.floor(linesCleared / config.LINES_PER_LEVEL) + 1;
                 let levelUpOccurred = false;
@@ -531,12 +562,16 @@
 
         function updateInfoPanel() {
             scoreElement.textContent = score;
+            // Calculate the current combo multiplier value
+            const comboMultiplierValue = 1 + (comboCount * 0.05);
             // Include permanent and temporary score modifiers in combo display
-            const totalMultiplier = (1 + (comboCount * 0.05)) * 
-                                  (1 + modifiers.lineScoreMultiplierBonus + modifiers.tempLineScoreMultiplierBonus) *
-                                  modifiers.glassCannonScoreMultiplier * modifiers.tempGlassCannonScoreMultiplier *
-                                  modifiers.speedMultiplier * modifiers.tempSpeedMultiplier;
-            document.getElementById('combo-multiplier').textContent = totalMultiplier.toFixed(2) + 'x';
+            const totalMultiplier = comboMultiplierValue * // Start with combo multiplier
+                                  (1 + modifiers.lineScoreMultiplierBonus + modifiers.tempLineScoreMultiplierBonus) * // Add base bonuses
+                                  modifiers.glassCannonScoreMultiplier * modifiers.tempGlassCannonScoreMultiplier * // Apply glass cannon
+                                  modifiers.speedMultiplier * modifiers.tempSpeedMultiplier; // Apply speed (inversely related to score usually, but shown here for effect)
+
+            // Display the combo multiplier itself (1 + combo * 0.05)
+            document.getElementById('combo-multiplier').textContent = comboMultiplierValue.toFixed(2) + 'x';
             speedDisplayElement.textContent = effectiveGameSpeed;
         }
 
@@ -594,22 +629,35 @@
                     temporaryModifier = NO_MODIFIER;
                     console.log("Applying temp modifier: None");
                 } else {
-                    const possibleItems = ITEM_POOL.filter(item => item.id !== lastTemporaryModifierId);
+                    // Filter potential items, excluding the last one and conditional ones
+                    const possibleItems = ITEM_POOL.filter(item => {
+                        if (item.id === lastTemporaryModifierId) return false;
+                        if (item.id === 'no_restrictions' && getTotalRestrictedRows() <= 0) return false;
+                        if (item.id === 'kinetic_conversion' && comboCount <= 0) return false; // Cannot apply if combo is 0
+                        return true;
+                    });
+
                     let selectedItem;
                     if (possibleItems.length > 0) {
                         const randomIndex = Math.floor(Math.random() * possibleItems.length);
                         selectedItem = possibleItems[randomIndex];
                     } else {
-                        selectedItem = ITEM_POOL.length > 0 ? ITEM_POOL[0] : NO_MODIFIER;
+                        // Fallback if filtering removed all options (e.g., only last modifier was possible)
+                        const fallbackOptions = ITEM_POOL.filter(item => item.id !== lastTemporaryModifierId);
+                        selectedItem = fallbackOptions.length > 0 ? fallbackOptions[Math.floor(Math.random() * fallbackOptions.length)] : NO_MODIFIER;
+                        // Re-check conditions for the fallback item
+                        if (selectedItem.id === 'no_restrictions' && getTotalRestrictedRows() <= 0) selectedItem = NO_MODIFIER;
+                        if (selectedItem.id === 'kinetic_conversion' && comboCount <= 0) selectedItem = NO_MODIFIER;
                     }
+
 
                     // Apply the new temporary effect
                     if (selectedItem.applyTemporaryEffect) {
-                         if (selectedItem.applyTemporaryEffect()) { // Check if effect could be applied (e.g., No Restrictions needs rows)
+                         if (selectedItem.applyTemporaryEffect()) { // Check if effect could be applied
                              temporaryModifier = selectedItem;
                              console.log(`Applying temp modifier: ${temporaryModifier.name}`);
                          } else {
-                             temporaryModifier = NO_MODIFIER; // Failed to apply (e.g., No Restrictions on 0 restricted rows)
+                             temporaryModifier = NO_MODIFIER; // Failed to apply
                              console.log(`Failed to apply temp modifier ${selectedItem.name}, defaulting to None.`);
                          }
                     } else {
@@ -626,6 +674,7 @@
             temporaryModifierDisplay.textContent = `Modifier: ${temporaryModifier.name}`;
             gameBoardElement.style.backgroundColor = temporaryModifier.backgroundColor || DEFAULT_BOARD_COLOR;
             updateRestrictedZoneUI(); // Update UI based on combined permanent + new temporary state
+            updateInfoPanel(); // Update combo display if Kinetic Conversion reset it
 
             if (!isFirstModifierCycle && config.ALLOW_GARBAGE) { addGarbageLines(1); }
 
@@ -663,6 +712,7 @@
             const availableItems = ITEM_POOL.filter(item => {
                 if (item.id === activeTempModifierId) return false; // Exclude active temp item
                 if (item.id === 'no_restrictions' && getTotalRestrictedRows() <= 0) return false; // Exclude No Restrictions if no rows are restricted
+                if (item.id === 'kinetic_conversion' && comboCount <= 0) return false; // Exclude Kinetic Conversion if combo is 0
                 return true;
             });
 
@@ -680,7 +730,8 @@
             if (shopItemsForCurrentModifier.length < 2 && ITEM_POOL.length > shopItemsForCurrentModifier.length) {
                  const fallbackItems = ITEM_POOL.filter(item =>
                      !shopItemsForCurrentModifier.some(existing => existing.id === item.id) &&
-                     !(item.id === 'no_restrictions' && getTotalRestrictedRows() <= 0)
+                     !(item.id === 'no_restrictions' && getTotalRestrictedRows() <= 0) &&
+                     !(item.id === 'kinetic_conversion' && comboCount <= 0) // Also check condition here
                  );
                  if (fallbackItems.length > 0) {
                      shopItemsForCurrentModifier.push(fallbackItems[Math.floor(Math.random() * fallbackItems.length)]);
@@ -743,7 +794,14 @@
                 const buyButton = document.createElement('button'); buyButton.className = 'shop-buy-button'; buyButton.textContent = 'Buy'; buyButton.dataset.itemId = item.id; buyButton.dataset.itemIndex = index; // Keep index for potential future use
 
                 // Disable button if cannot afford OR if an item was already bought THIS MODIFIER CYCLE
-                buyButton.disabled = score < displayCost || purchasedThisModifierCycle;
+                // Also disable Kinetic Conversion if comboCount is 0
+                let isDisabled = score < displayCost || purchasedThisModifierCycle;
+                if (item.id === 'kinetic_conversion' && comboCount <= 0) {
+                    isDisabled = true;
+                    descEl.textContent += " (Requires Combo > 0)"; // Add note to description
+                }
+                buyButton.disabled = isDisabled;
+
                 buyButton.onclick = () => buyItem(item.id, displayCost);
 
                 itemCard.appendChild(nameEl); itemCard.appendChild(descEl); itemCard.appendChild(costEl); itemCard.appendChild(buyButton);
@@ -763,7 +821,12 @@
             if (itemIndex === -1) return; // Should not happen
             const item = shopItemsForCurrentModifier[itemIndex];
 
-            // Removed pre-purchase check for Glass Cannon
+            // Specific check for Kinetic Conversion
+            if (item.id === 'kinetic_conversion' && comboCount <= 0) {
+                console.log("Cannot buy Kinetic Conversion with 0 combo.");
+                showMessage("Cannot buy Kinetic Conversion with 0 combo.", "OK");
+                return;
+            }
 
             if (score >= purchaseCost) {
                 console.log(`Buying item: ${item.name} for ${purchaseCost}`);
@@ -774,7 +837,7 @@
 
                 // Update dependent game state immediately after purchase
                 updateGameSpeed(); // Speed might change
-                updateInfoPanel(); // Update score display
+                updateInfoPanel(); // Update score display AND combo display (if reset)
                 updateRestrictedZoneUI(); // Restrictions might change
 
                 populateShopUI(); // Re-populate to disable buttons and update costs for next potential purchase (if cycle limit removed)

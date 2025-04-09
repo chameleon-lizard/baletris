@@ -24,3 +24,4 @@ b - shop
 *   **Cursed?:** More I pieces! But also more S and Z pieces.
 *   **Glass Cannon:** Score +100%. Top 4 rows blocked per purchase.
 *   **No Restrictions:** Reduce restriction by 1 row. Speed +30%, Shop Costs +40%.
+*   **Kinetic Conversion:** Convert combo bonus to base score bonus. Resets combo. Speed increases with bonus converted.
