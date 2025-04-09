@@ -68,9 +68,10 @@
         }
         /* Restricted Zone Overlay */
         #restricted-zone-overlay {
-            position: absolute; top: 3px; left: 3px; width: calc(100% - 6px); height: 0; /* Set by JS */
+            position: absolute; /* Top, Left, Width, Height set by JS */
             background: repeating-linear-gradient( 45deg, rgb(95 95 0 / 41%), rgb(95 95 0 / 41%) 3px, rgba(0, 0, 0, 0.25) 3px, rgba(0, 0, 0, 0.25) 6px );
-            z-index: 100; pointer-events: none; transition: height 0.3s ease;
+            z-index: 100; pointer-events: none; transition: height 0.3s ease, width 0s, left 0s; /* No transition for width or left */
+            display: none; /* Initially hidden, shown by JS */
         }
         .cell { border: 1px solid #374151; border-radius: 0.125rem; position: relative; z-index: 1; }
         /* Tetromino Colors */
@@ -250,14 +251,33 @@
         function updateRestrictedZoneUI() {
             const totalRows = getTotalRestrictedRows();
             const height = totalRows * config.CELL_SIZE;
-            console.log(`DEBUG: Updating restricted zone UI. Total Rows: ${totalRows}, Height: ${height}px`);
-            if (restrictedZoneOverlay) {
+            const overlayWidth = config.BOARD_WIDTH * config.CELL_SIZE; // Overlay width matches the grid width
+
+            if (restrictedZoneOverlay && boardAreaElement && gameBoardElement) {
+                // Calculate the total width of the game board element including borders
+                const gameBoardTotalWidth = gameBoardElement.offsetWidth; // Use offsetWidth which includes borders
+
+                // Calculate the width of the container
+                const boardAreaWidth = boardAreaElement.offsetWidth;
+
+                // Calculate the space on the left side due to centering
+                const leftOffset = (boardAreaWidth - gameBoardTotalWidth) / 2;
+
+                // Position the overlay: start after the left margin AND after the board's left border
+                const overlayLeftPosition = leftOffset + BOARD_BORDER_WIDTH;
+
+                console.log(`DEBUG: Updating restricted zone UI. Total Rows: ${totalRows}, Height: ${height}px, Width: ${overlayWidth}px, Left: ${overlayLeftPosition}px`);
+
                 restrictedZoneOverlay.style.height = `${height}px`;
+                restrictedZoneOverlay.style.width = `${overlayWidth}px`; // Set the width dynamically
+                restrictedZoneOverlay.style.top = `${BOARD_BORDER_WIDTH}px`; // Position below top border
+                restrictedZoneOverlay.style.left = `${overlayLeftPosition}px`; // Set calculated left position
                 restrictedZoneOverlay.style.display = totalRows > 0 ? 'block' : 'none';
             } else {
-                console.error("Restricted zone overlay element not found!");
+                console.error("Required elements for restricted zone UI update not found!");
             }
         }
+
 
         // Removed isPiecePotentiallyBlocked function
 
@@ -378,7 +398,7 @@
             if (!gameBoardElement) return;
             requestAnimationFrame(() => {
                 config.CELL_SIZE = (document.getElementById('game-container').offsetWidth - BOARD_BORDER_WIDTH * 2 - document.getElementById('info-panel').offsetWidth) / config.BOARD_WIDTH * 0.8;
-                
+
                 // --- Board Size Calculation (Set on Wrapper) ---
                 const totalWidth = ((config.BOARD_WIDTH * config.CELL_SIZE) + (BOARD_BORDER_WIDTH * 2));
                 const totalHeight = (config.BOARD_HEIGHT * config.CELL_SIZE) + (BOARD_BORDER_WIDTH * 2);
@@ -390,6 +410,9 @@
                 // Set grid template on the actual board
                 gameBoardElement.style.gridTemplateColumns = `repeat(${config.BOARD_WIDTH}, ${config.CELL_SIZE}px)`;
                 gameBoardElement.style.gridTemplateRows = `repeat(${config.BOARD_HEIGHT}, ${config.CELL_SIZE}px)`;
+
+                // Update restricted zone UI after board size is set
+                updateRestrictedZoneUI();
 
                 // --- End Board Size ---
 
@@ -630,11 +653,11 @@
       function addButtonListeners() {
           // Блокируем контекстное меню для всех кнопок
           const allButtons = [
-              btnPause, btnRotateL, btnLeft, btnDrop, 
-              btnDown, btnRight, btnRotateR, btnShop, 
+              btnPause, btnRotateL, btnLeft, btnDrop,
+              btnDown, btnRight, btnRotateR, btnShop,
               holdPiecePreviewElement
           ].filter(Boolean);
-          
+
           allButtons.forEach(button => {
               button.addEventListener('contextmenu', (e) => e.preventDefault());
           });
@@ -660,11 +683,11 @@
                   drawBoard();
               }, 100); // Интервал повторения
           });
-          
+
           btnLeft.addEventListener('touchend', () => {
               clearInterval(moveLeftInterval);
           });
-          
+
           // C обычным кликом для десктопа
           btnLeft.addEventListener('click', () => {
               movePiece(-1, 0);
@@ -682,11 +705,11 @@
                   drawBoard();
               }, 100);
           });
-          
+
           btnRight.addEventListener('touchend', () => {
               clearInterval(moveRightInterval);
           });
-          
+
           btnRight.addEventListener('click', () => {
               movePiece(1, 0);
               drawBoard();
@@ -703,11 +726,11 @@
                   drawBoard();
               }, 100);
           });
-          
+
           btnDown.addEventListener('touchend', () => {
               clearInterval(moveDownInterval);
           });
-          
+
           btnDown.addEventListener('click', () => {
               movePiece(0, 1);
               drawBoard();
@@ -773,4 +796,3 @@
     </script>
 </body>
 </html>
-
