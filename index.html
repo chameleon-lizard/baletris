@@ -228,7 +228,8 @@
         let modifiers = {};
 
         function resetModifiers() {
-             modifiers = {
+            comboCount = 0;
+            modifiers = {
                 // Permanent Modifiers (Stackable where applicable)
                 speedMultiplier: 1.0,               // Multiplicative stacking
                 lineScoreMultiplierBonus: 0.0,      // Additive stacking
@@ -372,6 +373,9 @@
 
         function lockPiece() {
             if (!currentPiece) return;
+            
+            // Reset combo if no lines were cleared
+            const linesBefore = linesCleared;
             // Removed initial restriction check
 
             clearLockDelay();
@@ -386,6 +390,11 @@
                 // console.log(`Piece locked. New base speed interval: ${baseGameSpeed}, Effective: ${effectiveGameSpeed}`);
 
                 const lC = clearLines(); // Clear lines first
+                
+                // Reset combo if piece locked without clearing lines
+                if (linesCleared === linesBefore) {
+                    comboCount = 0;
+                }
 
                  // --- New Glass Cannon Game Over Check (Post-Lock, Post-Clear) ---
                  const restrictedRows = getTotalRestrictedRows();
@@ -445,8 +454,13 @@
                 // Apply Glass Cannon multiplier (permanent and temporary stack multiplicatively)
                 let glassCannonMult = modifiers.glassCannonScoreMultiplier * modifiers.tempGlassCannonScoreMultiplier;
 
-                let finalScore = basePoints * currentScoreMultiplier * level * gamblerMultiplier * glassCannonMult;
+                // Calculate combo multiplier (5% per line in combo)
+                const comboMultiplier = 1 + (comboCount * 0.05);
+                let finalScore = basePoints * currentScoreMultiplier * level * gamblerMultiplier * glassCannonMult * comboMultiplier;
                 score += Math.floor(finalScore);
+                if (linesCount > 0) {
+                    comboCount++;
+                }
                 linesCleared += linesCount;
                 const newLevel = Math.floor(linesCleared / config.LINES_PER_LEVEL) + 1;
                 let levelUpOccurred = false;
@@ -788,7 +802,7 @@
 
         function startGame() {
             console.log("Starting Game...");
-            board = createEmptyBoard(); score = 0; linesCleared = 0; level = 1;
+            board = createEmptyBoard(); score = 0; linesCleared = 0; level = 1; comboCount = 0;
             baseGameSpeed = config.STARTING_SPEED;
             isGameOver = false; isPaused = false; isShopOpen = false;
             canHold = true; heldPiece = null;
